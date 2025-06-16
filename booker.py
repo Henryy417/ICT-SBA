@@ -1,3 +1,8 @@
+# TO-DOs
+# - Error handling
+# - Implement the 'cancel' command to allow users to cancel their own bookings.
+# - Implement the 'clear' command to allow users to cancel or shorten bookings.
+
 def main():
 
     from shlex import split
@@ -268,8 +273,6 @@ def main():
                     print("No bookings found.")
 
             elif args[0] == "book":
-
-                # Check if time slot booked
 
                 room_ids = args[1].split(',')
                 actual = []
