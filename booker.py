@@ -213,19 +213,29 @@ def main():
                 start = args[3]
                 end = args[4]
 
+                cursor = sqlite3.connect(databasepath).cursor()
+
                 params = []
                 if room_ids[0] != '*':
+                    for room in room_ids:
+                        if cursor.execute("SELECT * FROM rooms WHERE id=?", (room,)).fetchone() is None:
+                            print(f"Room '{room}' does not exist and is skipped.")
+                            room_ids.remove(room)
                     params.extend(room_ids)
                 if user_ids[0] != '*':
+                    for user in user_ids:
+                        if cursor.execute("SELECT * FROM users WHERE username=?", (user,)).fetchone() is None:
+                            print(f"User '{user}' does not exist and is skipped.")
+                            user_ids.remove(user)
                     params.extend(user_ids)
                 if start != '*':
                     params.append(start)
                 if end != '*':
                     params.append(end)
 
-                query = f"SELECT * FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if room_ids[0] != '*' else "TRUE"}" + f" AND {'username IN ('+','.join('?' for _ in user_ids)+')' if room_ids[0] != '*' else "TRUE"}" + f" AND {"left(timediff(?, end), 1) != '+'" if start != '*' else "TRUE"}" + f" AND {"left(timediff(start, ?), 1) != '+'" if end != '*' else "TRUE"}"
+                query = f"SELECT * FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"}" + f" AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"}" + f" AND {"substr(timediff(?, end),1,1) = '-'" if start != '*' else "TRUE"}" + f" AND {"substr(timediff(start, ?),1,1) = '-'" if end != '*' else "TRUE"}"
 
-                cursor = sqlite3.connect(databasepath).cursor()
+                
                 bookings = cursor.execute(query, params).fetchall()
                 cursor.connection.commit()
                 cursor.connection.close()
@@ -273,19 +283,51 @@ def main():
                 end = args[3]
 
                 cursor = sqlite3.connect(databasepath).cursor()
-                if cursor.execute("SELECT strftime('%%F %R', ?), strftime('%%F %R', ?)", (start, end)).fetchone() is not None:
-                    for room_id in room_ids:
-                        if cursor.execute("SELECT * FROM rooms WHERE id=?", (room_id,)).fetchone() is None:
-                            print(f"Room '{room_id}' does not exist and is skipped.")
-                            continue
-                        actual.append(room_id)
-                        cursor.execute("INSERT INTO bookings (roomID, username, start, end) VALUES (?, ?, strftime('%F %R', ?), strftime('%F %R', ?))", (room_id, currentuser, start, end))
-                    cursor.connection.commit()
-                    cursor.connection.close()
-                    print(f"Booking(s) for the following room(s) created successfully:")
-                    print("\t".join(actual))
+                if cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL AND strftime('%F %R', ?) IS NOT NULL", (start, end)).fetchone()[0] == 1:
+                    if cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (end, start)).fetchone()[0] == "+":
+                        booked = cursor.execute("SELECT id FROM bookings WHERE substr(timediff(?, end),1,1) = '-' AND substr(timediff(start, ?),1,1) = '-'", (start, end)).fetchone()
+                        if booked is None:
+                            for room_id in room_ids:
+                                if cursor.execute("SELECT * FROM rooms WHERE id=?", (room_id,)).fetchone() is None:
+                                    print(f"Room '{room_id}' does not exist and is skipped.")
+                                    continue
+                                actual.append(room_id)
+                                cursor.execute("INSERT INTO bookings (roomID, username, start, end) VALUES (?, ?, strftime('%F %R', ?), strftime('%F %R', ?))", (room_id, currentuser, start, end))
+                            cursor.connection.commit()
+                            cursor.connection.close()
+                            print(f"Booking(s) for the following room(s) created successfully:")
+                            print("\t".join(actual))
+                        else:
+                            print(f"Time slot is already booked (Booking ID: {booked[id]}). Please choose a different time.")
+                    else:
+                        print("Time slot is invalid. The end time must be after the start time.")
                 else:
                     print("Invalid time format. Please use 'YYYY-MM-DD HH:MM'.")
+
+            elif args[0] == "cancel":
+
+                booking_ids = args[1].split(',')
+                actual = []
+
+                cursor = sqlite3.connect(databasepath).cursor()
+                for booking_id in booking_ids:
+                    booking = cursor.execute("SELECT * FROM bookings WHERE id=?", (booking_id,)).fetchone()
+                    if booking is None:
+                        print(f"Booking ID '{booking_id}' does not exist and is skipped.")
+                        continue
+                    if booking[2] != currentuser and not isadmin:
+                        print(f"You can only cancel your own bookings. Booking ID '{booking_id}' is skipped.")
+                        continue
+                    actual.append(booking_id)
+                    cursor.execute("DELETE FROM bookings WHERE id=?", (booking_id,))
+                cursor.connection.commit()
+                cursor.connection.close()
+
+                if actual:
+                    print(f"The following bookings are cancelled successfully:")
+                    print("\t".join(actual))
+                else:
+                    print("No bookings were cancelled.")
 
             elif isadmin:
 
@@ -303,15 +345,15 @@ def main():
 
                 elif args[0] == "dereg":
 
-                    # To add detect if only one admin left and being deregistered
-
                     usernames = args[1].split(',')
                     actual = []
 
-                    cursor = sqlite3.connect(databasepath).cursor()
                     for username in usernames:
                         if cursor.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone() is None:
                             print(f"User '{username}' does not exist and is skipped.")
+                            continue
+                        elif username == currentuser:
+                            print(f"You cannot deregister yourself. Please log in as another user first.")
                             continue
                         actual.append(username)
                         cursor.execute("DELETE FROM users WHERE username=?", (username,))
