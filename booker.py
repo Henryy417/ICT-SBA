@@ -36,9 +36,6 @@ def main():
             "args": ["roomIDs"],
             "help": "Delete rooms with specified IDs. Separate IDs with commas without spaces. This command is only available for admin users.",
         },
-        "reset": {
-            "help": "Reset Booker by deleting all data and recreating the default admin user. This command is only available for admin users.",
-        },
         "cp": {
             "help": "Change the password of the current user.",
         },
@@ -87,7 +84,7 @@ def main():
 
         # Create bookings table if it does not exist
         cursor.execute(
-            "CREATE TABLE bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, roomID VARCHAR(8), username TEXT, start CHAR(16) NOT NULL, end CHAR(16) NOT NULL, FOREIGN KEY (username) REFERENCES users(username), FOREIGN KEY (roomID) REFERENCES rooms(id))"
+            "CREATE TABLE bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, roomID TEXT, username TEXT, start TEXT NOT NULL, end TEXT NOT NULL, FOREIGN KEY (username) REFERENCES users(username), FOREIGN KEY (roomID) REFERENCES rooms(id))"
         )
 
         print("Initialization: Created 'bookings' table.")
@@ -108,7 +105,8 @@ def main():
     isadmin = False  # Placeholder for admin status
 
     while True:
-        args = split(input('\n' + (('\033[31m'+currentuser+'\033[0m' if isadmin else currentuser) if currentuser is not None else "") + "> ")) # Split input into arguments
+        # Split input into arguments
+        args = split(input('\n' + (('\033[31m'+currentuser+'\033[0m' if isadmin else currentuser) if currentuser is not None else "") + "> "))
         
         # Ignore empty input
         if len(args) == 0:
@@ -241,7 +239,7 @@ def main():
                     print("Booking ID".ljust(25)+"Room ID".ljust(25)+"User".ljust(25)+"Start Time".ljust(25)+"End Time")
                     print("---".ljust(25)+"---".ljust(25)+"---".ljust(25)+"---".ljust(25)+"---")
                     for booking in bookings:
-                        print(str(booking[0]).ljust(25)+str(booking[1]).ljust(25)+str(booking[2]).ljust(25)+str(booking[3]).ljust(25)+str(booking[4]).ljust(25))
+                        print(str(booking[0]).ljust(25)+booking[1].ljust(25)+booking[2].ljust(25)+booking[3].ljust(25)+booking[4].ljust(25))
                 else:
                     print("No bookings found.")
 
@@ -265,7 +263,7 @@ def main():
                     print("Booking ID".ljust(25)+"Room ID".ljust(25)+"User".ljust(25)+"Start Time".ljust(25)+"End Time")
                     print("---".ljust(25)+"---".ljust(25)+"---".ljust(25)+"---".ljust(25)+"---")
                     for booking in bookings:
-                        print(str(booking[0]).ljust(25)+str(booking[1]).ljust(25)+str(booking[2]).ljust(25)+str(booking[3]).ljust(25)+str(booking[4]).ljust(25))
+                        print(str(booking[0]).ljust(25)+booking[1].ljust(25)+booking[2].ljust(25)+booking[3].ljust(25)+booking[4].ljust(25))
                 else:
                     print("No bookings found.")
 
@@ -281,20 +279,24 @@ def main():
                 cursor = sqlite3.connect(databasepath).cursor()
                 if cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL AND strftime('%F %R', ?) IS NOT NULL", (start, end)).fetchone()[0] == 1:
                     if cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (end, start)).fetchone()[0] == "+":
-                        booked = cursor.execute("SELECT id FROM bookings WHERE substr(timediff(?, end),1,1) = '-' AND substr(timediff(start, ?),1,1) = '-'", (start, end)).fetchone()
-                        if booked is None:
-                            for room_id in room_ids:
+                        for room_id in room_ids:
+                            booked = cursor.execute(f"SELECT id FROM bookings WHERE roomID = {room_id} AND substr(timediff(?, end),1,1) = '-' AND substr(timediff(start, ?),1,1) = '-'", (start, end)).fetchone()
+                            if booked is None:
                                 if cursor.execute("SELECT * FROM rooms WHERE id=?", (room_id,)).fetchone() is None:
                                     print(f"Room '{room_id}' does not exist and is skipped.")
                                     continue
                                 actual.append(room_id)
                                 cursor.execute("INSERT INTO bookings (roomID, username, start, end) VALUES (?, ?, strftime('%F %R', ?), strftime('%F %R', ?))", (room_id, currentuser, start, end))
-                            cursor.connection.commit()
-                            cursor.connection.close()
+                            else:
+                                print(f"Time slot is already booked (Booking ID: {booked[0]}) for room {room_id} and is skipped.")
+                        cursor.connection.commit()
+                        cursor.connection.close()
+
+                        if actual:
                             print(f"Booking(s) for the following room(s) created successfully:")
                             print("\t".join(actual))
                         else:
-                            print(f"Time slot is already booked (Booking ID: {booked[id]}). Please choose a different time.")
+                            print("No bookings were created. Please check the time slot and room IDs.")
                     else:
                         print("Time slot is invalid. The end time must be after the start time.")
                 else:
@@ -302,39 +304,23 @@ def main():
 
             elif args[0] == "cancel":
 
-                booking_ids = args[1].split(',')
-                actual = []
-
-                cursor = sqlite3.connect(databasepath).cursor()
-                for booking_id in booking_ids:
-                    booking = cursor.execute("SELECT * FROM bookings WHERE id=?", (booking_id,)).fetchone()
-                    if booking is None:
-                        print(f"Booking ID '{booking_id}' does not exist and is skipped.")
-                        continue
-                    if booking[2] != currentuser and not isadmin:
-                        print(f"Only admins can cancel others' bookings. Booking ID '{booking_id}' is skipped.")
-                        continue
-                    actual.append(booking_id)
-                    cursor.execute("DELETE FROM bookings WHERE id=?", (actual,))
-                cursor.connection.commit()
-                cursor.connection.close()
-
-                if actual:
-                    print(f"The following bookings are cancelled successfully:")
-                    print("\t".join(actual))
-                else:
-                    print("No bookings were cancelled.")
+                # to do
+                print("This command is not implemented yet.")
 
             elif args[0] == "clear":
 
                 # to do
-                print("This command is not implemented yet. Please use 'cancel' to cancel bookings.")
+                print("This command is not implemented yet.")
             
             elif args[0] == "sql":
 
                 cursor = sqlite3.connect(databasepath).cursor()
                 try:
-                    cursor.execute(args[1])
+                    result = cursor.execute(args[1]).fetchall()
+                    for row in result:
+                        for colindex in range(len(row)-1):
+                            print(str(row[colindex]).ljust(25))
+                        print(row[-1])
                     cursor.connection.commit()
                     print("SQL query executed successfully.")
                 except sqlite3.Error as e:
@@ -435,34 +421,14 @@ def main():
                     else:
                         print("No rooms were deleted.")                  
 
-                elif args[0] == "reset":
-
-                    cursor = sqlite3.connect(databasepath).cursor()
-                    if input("Are you sure you want to reset Booker? This will delete all data and recreate the default admin user 'admin'. Type 'yes' to confirm: ").strip().lower() != "yes":
-                        print("Reset cancelled.")
-                        continue
-                    cursor.execute("DROP TABLE IF EXISTS users")
-                    cursor.execute("DROP TABLE IF EXISTS bookings")
-                    cursor.execute("DROP TABLE IF EXISTS rooms")
-                    cursor.execute(
-                        "CREATE TABLE users (username TEXT PRIMARY KEY, pwhash BLOB NOT NULL, isadmin BOOLEAN NOT NULL DEFAULT 0)"
-                    )
-                    cursor.execute("INSERT INTO users (username, pwhash, isadmin) VALUES (?, ?, ?)", ("admin", hashlib.sha3_512(b"admin").digest(), 1))
-                    cursor.execute(
-                        "CREATE TABLE bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, roomID VARCHAR(8), username TEXT, start CHAR(16) NOT NULL, end CHAR(16) NOT NULL, FOREIGN KEY (username) REFERENCES users(username), FOREIGN KEY (roomID) REFERENCES rooms(id))"
-                    )
-                    cursor.execute(
-                        "CREATE TABLE rooms (id VARCHAR(8) PRIMARY KEY)"
-                    )
-                    cursor.connection.commit()
-                    cursor.connection.close()
-
-                    print("Booker has been reset successfully. Default admin user 'admin' has been recreated.")
-
             else:
                 print(f"Command '{args[0]}' is not available for standard users.")
         else:
             print(f"You must be logged in to use the command '{args[0]}'. Use 'login' to log in as a user first.")
+
+
+
+
 
 # Make sure the script can only be run as a standalone program
 if __name__ == "__main__":
