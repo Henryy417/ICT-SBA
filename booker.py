@@ -45,7 +45,7 @@ def main():
         "rooms": {
             "help": "List all rooms.",
         },
-        "list": {
+        "search": {
             "args": ["roomIDS", "usernames", "start", "end"],
             "help": "List bookings of the specified rooms booked by specified users within a given time. Separate IDs and names with commas without spaces. Time inputs must be quoted and in the format of YYYY-MM-DD HH:MM. Wildcard * can be used. e.g. 'list * * * *' will list all bookings.",
         },
@@ -62,13 +62,9 @@ def main():
             "args": ["roomIDS", "usernames", "start", "end"],
             "help": "Cancel or shorten bookings to make available the specified rooms booked by specified users within a given time. Separate IDs and names with commas without spaces. Time inputs must be quoted and in the format of YYYY-MM-DD HH:MM. Standard users can only clear their own bookings.",
         },
-        "search": {
-            "args": ["start", "end", "duration"],
-            "help": "Search for rooms that are available to be booked for a specified duration (in minutes) within a given time. Time inputs must be quoted and in the format of YYYY-MM-DD HH:MM.",
-        },
         "sql": {
             "args": ["query"],
-            "help": "Execute a raw SQL query. Be careful with this command as it can modify the database.",
+            "help": "Execute a raw SQL query. The SQL query must be quoted. Be careful with this command as it can modify the database.",
         },
     }
 
@@ -206,7 +202,7 @@ def main():
                 else:
                     print("No rooms found. Please create rooms using the 'build' command.")
 
-            elif args[0] == "list":
+            elif args[0] == "search":
 
                 room_ids = args[1].split(',')
                 user_ids = args[2].split(',')
@@ -316,10 +312,10 @@ def main():
                         print(f"Booking ID '{booking_id}' does not exist and is skipped.")
                         continue
                     if booking[2] != currentuser and not isadmin:
-                        print(f"You can only cancel your own bookings. Booking ID '{booking_id}' is skipped.")
+                        print(f"Only admins can cancel others' bookings. Booking ID '{booking_id}' is skipped.")
                         continue
                     actual.append(booking_id)
-                    cursor.execute("DELETE FROM bookings WHERE id=?", (booking_id,))
+                    cursor.execute("DELETE FROM bookings WHERE id=?", (actual,))
                 cursor.connection.commit()
                 cursor.connection.close()
 
@@ -329,6 +325,21 @@ def main():
                 else:
                     print("No bookings were cancelled.")
 
+            elif args[0] == "clear":
+
+                # to do
+                print("This command is not implemented yet. Please use 'cancel' to cancel bookings.")
+            
+            elif args[0] == "sql":
+
+                cursor = sqlite3.connect(databasepath).cursor()
+                try:
+                    cursor.execute(args[1])
+                    cursor.connection.commit()
+                    print("SQL query executed successfully.")
+                except sqlite3.Error as e:
+                    print(f"Error executing SQL query: {e}")
+                
             elif isadmin:
 
                 if args[0] == "reg":
