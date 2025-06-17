@@ -2,6 +2,7 @@
 # - Error handling
 # - Implement the 'cancel' command to allow users to cancel their own bookings.
 # - Implement the 'clear' command to allow users to cancel or shorten bookings.
+# - Foreign key (dereg, destroy)
 
 def main():
 
@@ -29,6 +30,10 @@ def main():
         "dereg": {
             "args": ["usernames"],
             "help": "Deregister users. Separate names with commas without spaces. This command is only available for admin users.",
+        },
+        "cpx": {
+            "args": ["username"],
+            "help": "Change the password of a user. This command is only available for admin users.",
         },
         "users": {
             "help": "List all users. This command is only available for admin users.",
@@ -348,6 +353,7 @@ def main():
                     usernames = args[1].split(',')
                     actual = []
 
+                    cursor = sqlite3.connect(databasepath).cursor()
                     for username in usernames:
                         if cursor.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone() is None:
                             print(f"User '{username}' does not exist and is skipped.")
@@ -365,6 +371,25 @@ def main():
                         print("\t".join(actual))
                     else:
                         print("No users were deregistered.")
+                
+                elif args[0] == "cpx":
+
+                    cursor = sqlite3.connect(databasepath).cursor()
+                    if cursor.execute("SELECT * FROM users WHERE username=?", (args[1],)).fetchone() is None:
+                        print(f"User '{args[1]}' does not exist.")
+                    else:
+                        new_password = getpass("New Password: ")
+                        confirm_password = getpass("Confirm New Password: ")
+
+                        if new_password != confirm_password:
+                            print("Passwords do not match. Please try again.")
+                            continue
+
+                        new_pwhash = hashlib.sha3_512(new_password.encode()).digest()
+                        cursor.execute("UPDATE users SET pwhash=? WHERE username=?", (new_pwhash, args[1]))
+                        print(f"Password for user '{args[1]}' changed successfully.")
+                    cursor.connection.commit()
+                    cursor.connection.close()
 
                 elif args[0] == "users":
 
