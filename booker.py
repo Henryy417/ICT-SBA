@@ -13,6 +13,9 @@ def main():
     copyright = "Copyright (c) 2025 Chen Hang Tsz Henry"
     databasepath = os.path.realpath(os.path.dirname(__file__))+"/data.db"
 
+    currentuser = None  # Placeholder for current user
+    isadmin = False  # Placeholder for admin status
+
     commands = {
         "help": {"help": "Show help message."},
         "man": {"args": ["command"], "help": "Show manual for a specific command."},
@@ -50,7 +53,7 @@ def main():
             "help": "List all rooms.",
         },
         "search": {
-            "args": ["roomIDS", "usernames", "start", "end"],
+            "args": ["roomIDs", "usernames", "start", "end"],
             "help": "List bookings of the specified rooms booked by specified users within a given time. Separate IDs and names with commas without spaces. Time inputs must be quoted and in the format of YYYY-MM-DD HH:MM. Wildcard * can be used. e.g. 'list * * * *' will list all bookings.",
         },
         "show": {
@@ -66,8 +69,8 @@ def main():
             "help": "Cancel bookings by booking IDs. Separate IDs with commas without spaces. Standard users can only cancel their own bookings."
         },
         "clear": {
-            "args": ["roomIDS", "usernames", "start", "end"],
-            "help": "Cancel or shorten bookings to make available the specified rooms booked by specified users within a given time. Separate IDs and names with commas without spaces. Time inputs must be quoted and in the format of YYYY-MM-DD HH:MM. Standard users can only clear their own bookings.",
+            "args": ["roomIDs", "usernames", "start", "end"],
+            "help": "Cancel bookings to make available the specified rooms booked by specified users within a given time. Separate IDs and names with commas without spaces. Time inputs must be quoted and in the format of YYYY-MM-DD HH:MM. Standard users can only clear their own bookings.",
         },
         "sql": {
             "args": ["query"],
@@ -80,17 +83,17 @@ def main():
     print("Type 'help' for a list of commands.")
 
     cursor = sqlite3.connect(databasepath).cursor()
-    if cursor.execute("SELECT * FROM sqlite_master WHERE type='table' AND name='users'").fetchone() is None:
+    if cursor.execute("SELECT type FROM sqlite_master WHERE type='table' AND name='users'").fetchone() is None:
 
         # Create users table if it does not exist
         cursor.execute(
-            "CREATE TABLE users (username TEXT PRIMARY KEY, pwhash BLOB NOT NULL, isadmin BOOlEAN NOT NULL DEFAULT 0)"
+            "CREATE TABLE users (username TEXT PRIMARY KEY, pwhash BLOB NOT NULL, isadmin BOOLEAN NOT NULL DEFAULT 0)"
         )
         cursor.execute("INSERT INTO users (username, pwhash, isadmin) VALUES (?, ?, ?)", ("admin", hashlib.sha3_512(b"admin").digest(), 1))
 
         print("Initialization: Created 'users' table and added default admin user.")
 
-    if cursor.execute("SELECT * FROM sqlite_master WHERE type='table' AND name='bookings'").fetchone() is None:
+    if cursor.execute("SELECT type FROM sqlite_master WHERE type='table' AND name='bookings'").fetchone() is None:
 
         # Create bookings table if it does not exist
         cursor.execute(
@@ -99,7 +102,7 @@ def main():
 
         print("Initialization: Created 'bookings' table.")
 
-    if cursor.execute("SELECT * FROM sqlite_master WHERE type='table' AND name='rooms'").fetchone() is None:
+    if cursor.execute("SELECT type FROM sqlite_master WHERE type='table' AND name='rooms'").fetchone() is None:
 
         # Create rooms table if it does not exist
         cursor.execute(
@@ -111,8 +114,7 @@ def main():
     cursor.connection.commit()
     cursor.connection.close()
 
-    currentuser = None  # Placeholder for current user
-    isadmin = False  # Placeholder for admin status
+    print()
 
     while True:
         # Split input into arguments
@@ -167,29 +169,28 @@ def main():
             pwhash = hashlib.sha3_512(getpass("Password: ").encode()).digest()
 
             cursor = sqlite3.connect(databasepath).cursor()
-            result = cursor.execute("SELECT * FROM users WHERE username=? AND pwhash=?", (args[1], pwhash)).fetchone()
+            result = cursor.execute("SELECT isadmin FROM users WHERE username=? AND pwhash=?", (args[1], pwhash)).fetchone()
             cursor.connection.commit()
             cursor.connection.close()
 
             if result is not None:
                 currentuser = args[1]
-                isadmin = result[2] == 1
+                isadmin = result[0] == 1
                 print(f"Logged in as '{'\033[31m'+currentuser+'\033[0m' if isadmin else currentuser}'.")
             else:
                 print("Invalid username or password.")
 
         elif currentuser is not None:
             if args[0] == "cp":
-                
-                new_password = getpass("New Password: ")
-                confirm_password = getpass("Confirm New Password: ")
 
-                if new_password == confirm_password:
+                if (new_password := getpass("New Password: ")) == getpass("Confirm New Password: "):
                     new_pwhash = hashlib.sha3_512(new_password.encode()).digest()
+
                     cursor = sqlite3.connect(databasepath).cursor()
                     cursor.execute("UPDATE users SET pwhash=? WHERE username=?", (new_pwhash, currentuser))
                     cursor.connection.commit()
                     cursor.connection.close()
+                    
                     print("Password changed successfully.")
                 else:
                     print("Passwords do not match. Please try again.")
@@ -220,13 +221,13 @@ def main():
                 params = []
                 if room_ids[0] != '*':
                     for room in room_ids:
-                        if cursor.execute("SELECT * FROM rooms WHERE id=?", (room,)).fetchone() is None:
+                        if cursor.execute("SELECT id FROM rooms WHERE id=?", (room,)).fetchone() is None:
                             print(f"Room '{room}' does not exist and is skipped.")
                             room_ids.remove(room)
                     params.extend(room_ids)
                 if user_ids[0] != '*':
                     for user in user_ids:
-                        if cursor.execute("SELECT * FROM users WHERE username=?", (user,)).fetchone() is None:
+                        if cursor.execute("SELECT id FROM users WHERE username=?", (user,)).fetchone() is None:
                             print(f"User '{user}' does not exist and is skipped.")
                             user_ids.remove(user)
                     params.extend(user_ids)
@@ -288,7 +289,7 @@ def main():
                         for room_id in room_ids:
                             booked = cursor.execute(f"SELECT id FROM bookings WHERE roomID = {room_id} AND substr(timediff(?, end),1,1) = '-' AND substr(timediff(start, ?),1,1) = '-'", (start, end)).fetchone()
                             if booked is None:
-                                if cursor.execute("SELECT * FROM rooms WHERE id=?", (room_id,)).fetchone() is None:
+                                if cursor.execute("SELECT id FROM rooms WHERE id=?", (room_id,)).fetchone() is None:
                                     print(f"Room '{room_id}' does not exist and is skipped.")
                                     continue
                                 actual.append(room_id)
@@ -315,11 +316,11 @@ def main():
 
                 cursor = sqlite3.connect(databasepath).cursor()
                 for booking_id in booking_ids:
-                    booking = cursor.execute("SELECT * FROM bookings WHERE id=?", (booking_id,)).fetchone()
+                    booking = cursor.execute("SELECT username FROM bookings WHERE id=?", (booking_id,)).fetchone()
                     if booking is None:
                         print(f"Booking ID '{booking_id}' does not exist and is skipped.")
                         continue
-                    if booking[2] != currentuser and not isadmin:
+                    if booking[0] != currentuser and not isadmin:
                         print(f"You can only cancel your own bookings as a standard user. Booking ID '{booking_id}' is skipped.")
                         continue
                     actual.append(booking_id)
@@ -346,13 +347,13 @@ def main():
                 params = []
                 if room_ids[0] != '*':
                     for room in room_ids:
-                        if cursor.execute("SELECT * FROM rooms WHERE id=?", (room,)).fetchone() is None:
+                        if cursor.execute("SELECT id FROM rooms WHERE id=?", (room,)).fetchone() is None:
                             print(f"Room '{room}' does not exist and is skipped.")
                             room_ids.remove(room)
                     params.extend(room_ids)
                 if user_ids[0] != '*':
                     for user in user_ids:
-                        if cursor.execute("SELECT * FROM users WHERE username=?", (user,)).fetchone() is None:
+                        if cursor.execute("SELECT id FROM users WHERE username=?", (user,)).fetchone() is None:
                             print(f"User '{user}' does not exist and is skipped.")
                             user_ids.remove(user)
                     params.extend(user_ids)
@@ -361,7 +362,25 @@ def main():
                 if end != '*':
                     params.append(end)
 
-                # TO DO
+                query = f"SELECT id, username FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"}" + f" AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"}" + f" AND {"substr(timediff(?, end),1,1) = '-'" if start != '*' else "TRUE"}" + f" AND {"substr(timediff(start, ?),1,1) = '-'" if end != '*' else "TRUE"}"
+
+                bookings = cursor.execute(query, params).fetchall()
+
+                if bookings:
+                    for booking in bookings:
+                        if booking[1] != currentuser and not isadmin:
+                            print(f"You can only clear your own bookings as a standard user. Booking ID '{booking[0]}' is skipped.")
+                            continue
+                        actual.append(booking[0])
+                        cursor.execute("DELETE FROM bookings WHERE id=?", (booking[0],))
+                    cursor.connection.commit()
+                    cursor.connection.close()
+
+                if actual:
+                    print(f"The following bookings are cleared successfully:")
+                    print("\t".join(actual))
+                else:
+                    print("No bookings were cleared.")
 
             elif args[0] == "sql":
 
@@ -383,7 +402,7 @@ def main():
                 if args[0] == "reg":
                     
                     cursor = sqlite3.connect(databasepath).cursor()
-                    if cursor.execute("SELECT * FROM users WHERE username=?", (args[1],)).fetchone() is None:
+                    if cursor.execute("SELECT username FROM users WHERE username=?", (args[1],)).fetchone() is None:
                         pwhash = hashlib.sha3_512(getpass("Password: ").encode()).digest()
                         cursor.execute("INSERT INTO users (username, pwhash) VALUES (?, ?)", (args[1], pwhash))
                         print(f"User '{args[1]}' registered successfully.")
@@ -401,7 +420,7 @@ def main():
                         cursor = sqlite3.connect(databasepath).cursor()
                         cursor.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
                         for username in usernames:
-                            if cursor.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone() is None:
+                            if cursor.execute("SELECT username FROM users WHERE username=?", (username,)).fetchone() is None:
                                 print(f"User '{username}' does not exist and is skipped.")
                                 continue
                             elif username == currentuser:
@@ -424,7 +443,7 @@ def main():
                 elif args[0] == "cpx":
 
                     cursor = sqlite3.connect(databasepath).cursor()
-                    if cursor.execute("SELECT * FROM users WHERE username=?", (args[1],)).fetchone() is None:
+                    if cursor.execute("SELECT username FROM users WHERE username=?", (args[1],)).fetchone() is None:
                         print(f"User '{args[1]}' does not exist.")
                     else:
                         new_password = getpass("New Password: ")
@@ -442,7 +461,7 @@ def main():
                 elif args[0] == "users":
 
                     cursor = sqlite3.connect(databasepath).cursor()
-                    users = cursor.execute("SELECT username, isadmin FROM users").fetchall()
+                    users = cursor.execute("SELECT * FROM users").fetchall()
                     cursor.connection.commit()
                     cursor.connection.close()
 
@@ -462,7 +481,7 @@ def main():
 
                     cursor = sqlite3.connect(databasepath).cursor()
                     for room_id in room_ids:
-                        if cursor.execute("SELECT * FROM rooms WHERE id=?", (room_id,)).fetchone() is not None:
+                        if cursor.execute("SELECT id FROM rooms WHERE id=?", (room_id,)).fetchone() is not None:
                             print(f"Room '{room_id}' already exists and is skipped.")
                             continue
                         actual.append(room_id)
@@ -485,7 +504,7 @@ def main():
                         cursor = sqlite3.connect(databasepath).cursor()
                         cursor.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
                         for room_id in room_ids:
-                            if cursor.execute("SELECT * FROM rooms WHERE id=?", (room_id,)).fetchone() is None:
+                            if cursor.execute("SELECT id FROM rooms WHERE id=?", (room_id,)).fetchone() is None:
                                 print(f"Room '{room_id}' does not exist and is skipped.")
                                 continue
                             actual.append(room_id)
