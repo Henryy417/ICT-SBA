@@ -1,8 +1,5 @@
 # TO-DOs
 # - Error handling
-# - Implement the 'cancel' command to allow users to cancel their own bookings.
-# - Implement the 'clear' command to allow users to cancel or shorten bookings.
-# - Foreign key (dereg, destroy)
 
 def main():
 
@@ -64,7 +61,10 @@ def main():
             "args": ["roomIDs", "start", "end"],
             "help": "Make a reservation for specified rooms at a given time. Separate IDs with commas without spaces. Time inputs must be quoted and in the format of YYYY-MM-DD HH:MM.",
         },
-        "cancel": {"args": ["bookingIDs"], "help": "Cancel bookings by booking IDs. Separate IDs with commas without spaces. Standard users can only cancel their own bookings."},
+        "cancel": {
+            "args": ["bookingIDs"],
+            "help": "Cancel bookings by booking IDs. Separate IDs with commas without spaces. Standard users can only cancel their own bookings."
+        },
         "clear": {
             "args": ["roomIDS", "usernames", "start", "end"],
             "help": "Cancel or shorten bookings to make available the specified rooms booked by specified users within a given time. Separate IDs and names with commas without spaces. Time inputs must be quoted and in the format of YYYY-MM-DD HH:MM. Standard users can only clear their own bookings.",
@@ -116,7 +116,7 @@ def main():
 
     while True:
         # Split input into arguments
-        args = split(input('\n' + (('\033[31m'+currentuser+'\033[0m' if isadmin else currentuser) if currentuser is not None else "") + "> "))
+        args = split(input((('\033[31m'+currentuser+'\033[0m' if isadmin else currentuser) if currentuser is not None else "") + "> "))
         
         # Ignore empty input
         if len(args) == 0:
@@ -184,17 +184,15 @@ def main():
                 new_password = getpass("New Password: ")
                 confirm_password = getpass("Confirm New Password: ")
 
-                if new_password != confirm_password:
+                if new_password == confirm_password:
+                    new_pwhash = hashlib.sha3_512(new_password.encode()).digest()
+                    cursor = sqlite3.connect(databasepath).cursor()
+                    cursor.execute("UPDATE users SET pwhash=? WHERE username=?", (new_pwhash, currentuser))
+                    cursor.connection.commit()
+                    cursor.connection.close()
+                    print("Password changed successfully.")
+                else:
                     print("Passwords do not match. Please try again.")
-                    continue
-
-                new_pwhash = hashlib.sha3_512(new_password.encode()).digest()
-                cursor = sqlite3.connect(databasepath).cursor()
-                cursor.execute("UPDATE users SET pwhash=? WHERE username=?", (new_pwhash, currentuser))
-                cursor.connection.commit()
-                cursor.connection.close()
-
-                print("Password changed successfully.")
 
             elif args[0] == "rooms":
 
@@ -312,17 +310,63 @@ def main():
 
             elif args[0] == "cancel":
 
-                # to do
-                print("This command is not implemented yet.")
+                booking_ids = args[1].split(',')
+                actual = []
+
+                cursor = sqlite3.connect(databasepath).cursor()
+                for booking_id in booking_ids:
+                    booking = cursor.execute("SELECT * FROM bookings WHERE id=?", (booking_id,)).fetchone()
+                    if booking is None:
+                        print(f"Booking ID '{booking_id}' does not exist and is skipped.")
+                        continue
+                    if booking[2] != currentuser and not isadmin:
+                        print(f"You can only cancel your own bookings as a standard user. Booking ID '{booking_id}' is skipped.")
+                        continue
+                    actual.append(booking_id)
+                    cursor.execute("DELETE FROM bookings WHERE id=?", (booking_id,))
+                cursor.connection.commit()
+                cursor.connection.close()
+
+                if actual:
+                    print(f"The following bookings are cancelled successfully:")
+                    print("\t".join(actual))
+                else:
+                    print("No bookings were cancelled.")
 
             elif args[0] == "clear":
 
-                # to do
-                print("This command is not implemented yet.")
-            
+                room_ids = args[1].split(',')
+                user_ids = args[2].split(',')
+                start = args[3]
+                end = args[4]
+                actual = []
+
+                cursor = sqlite3.connect(databasepath).cursor()
+
+                params = []
+                if room_ids[0] != '*':
+                    for room in room_ids:
+                        if cursor.execute("SELECT * FROM rooms WHERE id=?", (room,)).fetchone() is None:
+                            print(f"Room '{room}' does not exist and is skipped.")
+                            room_ids.remove(room)
+                    params.extend(room_ids)
+                if user_ids[0] != '*':
+                    for user in user_ids:
+                        if cursor.execute("SELECT * FROM users WHERE username=?", (user,)).fetchone() is None:
+                            print(f"User '{user}' does not exist and is skipped.")
+                            user_ids.remove(user)
+                    params.extend(user_ids)
+                if start != '*':
+                    params.append(start)
+                if end != '*':
+                    params.append(end)
+
+                # TO DO
+
             elif args[0] == "sql":
 
                 cursor = sqlite3.connect(databasepath).cursor()
+                cursor.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
                 try:
                     result = cursor.execute(args[1]).fetchall()
                     for row in result:
@@ -350,27 +394,32 @@ def main():
 
                 elif args[0] == "dereg":
 
-                    usernames = args[1].split(',')
-                    actual = []
+                    if getpass(f"Are you sure you want to deregister the following users: {args[1]}? Their bookings will be as well cancelled. (yes/no): ").lower() == "yes":
+                        usernames = args[1].split(',')
+                        actual = []
 
-                    cursor = sqlite3.connect(databasepath).cursor()
-                    for username in usernames:
-                        if cursor.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone() is None:
-                            print(f"User '{username}' does not exist and is skipped.")
-                            continue
-                        elif username == currentuser:
-                            print(f"You cannot deregister yourself. Please log in as another user first.")
-                            continue
-                        actual.append(username)
-                        cursor.execute("DELETE FROM users WHERE username=?", (username,))
-                    cursor.connection.commit()
-                    cursor.connection.close()
+                        cursor = sqlite3.connect(databasepath).cursor()
+                        cursor.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
+                        for username in usernames:
+                            if cursor.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone() is None:
+                                print(f"User '{username}' does not exist and is skipped.")
+                                continue
+                            elif username == currentuser:
+                                print(f"You cannot deregister yourself. Please log in as another user first.")
+                                continue
+                            actual.append(username)
+                            cursor.execute("DELETE FROM bookings WHERE username=?", (username,))
+                            cursor.execute("DELETE FROM users WHERE username=?", (username,))
+                        cursor.connection.commit()
+                        cursor.connection.close()
 
-                    if actual:
-                        print(f"The following users are deregistered successfully:")
-                        print("\t".join(actual))
+                        if actual:
+                            print(f"The following users are deregistered successfully:")
+                            print("\t".join(actual))
+                        else:
+                            print("No users were deregistered.")
                     else:
-                        print("No users were deregistered.")
+                        print("Deregistration cancelled.")
                 
                 elif args[0] == "cpx":
 
@@ -381,13 +430,12 @@ def main():
                         new_password = getpass("New Password: ")
                         confirm_password = getpass("Confirm New Password: ")
 
-                        if new_password != confirm_password:
+                        if new_password == confirm_password:
+                            new_pwhash = hashlib.sha3_512(new_password.encode()).digest()
+                            cursor.execute("UPDATE users SET pwhash=? WHERE username=?", (new_pwhash, args[1]))
+                            print(f"Password for user '{args[1]}' changed successfully.")
+                        else:
                             print("Passwords do not match. Please try again.")
-                            continue
-
-                        new_pwhash = hashlib.sha3_512(new_password.encode()).digest()
-                        cursor.execute("UPDATE users SET pwhash=? WHERE username=?", (new_pwhash, args[1]))
-                        print(f"Password for user '{args[1]}' changed successfully.")
                     cursor.connection.commit()
                     cursor.connection.close()
 
@@ -430,30 +478,36 @@ def main():
 
                 elif args[0] == "destroy":
 
-                    room_ids = args[1].split(',')
-                    actual = []
+                    if getpass(f"Are you sure you want to delete the following rooms: {args[1]}? Their bookings will be as well cancelled. (yes/no): ").lower() == "yes":
+                        room_ids = args[1].split(',')
+                        actual = []
 
-                    cursor = sqlite3.connect(databasepath).cursor()
-                    for room_id in room_ids:
-                        if cursor.execute("SELECT * FROM rooms WHERE id=?", (room_id,)).fetchone() is None:
-                            print(f"Room '{room_id}' does not exist and is skipped.")
-                            continue
-                        actual.append(room_id)
-                        cursor.execute("DELETE FROM rooms WHERE id=?", (room_id,))
-                    cursor.connection.commit()
-                    cursor.connection.close()
+                        cursor = sqlite3.connect(databasepath).cursor()
+                        cursor.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
+                        for room_id in room_ids:
+                            if cursor.execute("SELECT * FROM rooms WHERE id=?", (room_id,)).fetchone() is None:
+                                print(f"Room '{room_id}' does not exist and is skipped.")
+                                continue
+                            actual.append(room_id)
+                            cursor.execute("DELETE FROM bookings WHERE roomID=?", (room_id,))
+                            cursor.execute("DELETE FROM rooms WHERE id=?", (room_id,))
+                        cursor.connection.commit()
+                        cursor.connection.close()
 
-                    if actual:
-                        print(f"The following rooms are deleted successfully:")
-                        print("\t".join(actual))
+                        if actual:
+                            print(f"The following rooms are deleted successfully:")
+                            print("\t".join(actual))
+                        else:
+                            print("No rooms were deleted.")
                     else:
-                        print("No rooms were deleted.")                  
+                        print("Deletion cancelled.")                  
 
             else:
                 print(f"Command '{args[0]}' is not available for standard users.")
         else:
             print(f"You must be logged in to use the command '{args[0]}'. Use 'login' to log in as a user first.")
 
+        print() # Print a new line for better readability after each command execution
 
 
 
