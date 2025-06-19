@@ -5,8 +5,8 @@ def main():
 
     from shlex import split
     from getpass import getpass
+    from hashlib import sha3_512
     import sqlite3
-    import hashlib
     import os
 
     info = "Booker v1.0.0"
@@ -17,12 +17,14 @@ def main():
     isadmin = False  # Placeholder for admin status
 
     commands = {
+        # Commands usable before login
         "help": {"help": "Show help message."},
         "man": {"args": ["command"], "help": "Show manual for a specific command."},
         "exit": {"help": "Exit Booker."},
         "ver": {"help": "Show current version info."},
         "cls": {"help": "Clear the screen."},
         "login": {"args": ["username"], "help": "Log in as a user."},
+        # Commands usable as admins
         "reg": {
             "args": ["username"],
             "help": "Register a new user. This command is only available for admin users.",
@@ -46,6 +48,7 @@ def main():
             "args": ["roomIDs"],
             "help": "Delete rooms with specified IDs. Separate IDs with commas without spaces. This command is only available for admin users.",
         },
+        # Commands usable as standard users
         "cp": {
             "help": "Change the password of the current user.",
         },
@@ -89,7 +92,7 @@ def main():
         cursor.execute(
             "CREATE TABLE users (username TEXT PRIMARY KEY, pwhash BLOB NOT NULL, isadmin BOOLEAN NOT NULL DEFAULT 0)"
         )
-        cursor.execute("INSERT INTO users (username, pwhash, isadmin) VALUES (?, ?, ?)", ("admin", hashlib.sha3_512(b"admin").digest(), 1))
+        cursor.execute("INSERT INTO users (username, pwhash, isadmin) VALUES (?, ?, ?)", ("admin", sha3_512(b"admin").digest(), 1))
 
         print("Initialization: Created 'users' table and added default admin user.")
 
@@ -166,7 +169,7 @@ def main():
 
         elif args[0] == "login":
 
-            pwhash = hashlib.sha3_512(getpass("Password: ").encode()).digest()
+            pwhash = sha3_512(getpass("Password: ").encode()).digest()
 
             cursor = sqlite3.connect(databasepath).cursor()
             result = cursor.execute("SELECT isadmin FROM users WHERE username=? AND pwhash=?", (args[1], pwhash)).fetchone()
@@ -184,7 +187,7 @@ def main():
             if args[0] == "cp":
 
                 if (new_password := getpass("New Password: ")) == getpass("Confirm New Password: "):
-                    new_pwhash = hashlib.sha3_512(new_password.encode()).digest()
+                    new_pwhash = sha3_512(new_password.encode()).digest()
 
                     cursor = sqlite3.connect(databasepath).cursor()
                     cursor.execute("UPDATE users SET pwhash=? WHERE username=?", (new_pwhash, currentuser))
@@ -405,7 +408,7 @@ def main():
                     cursor = sqlite3.connect(databasepath).cursor()
 
                     if cursor.execute("SELECT username FROM users WHERE username=?", (args[1])).fetchone() is None:
-                        pwhash = hashlib.sha3_512(getpass("Password: ").encode()).digest()
+                        pwhash = sha3_512(getpass("Password: ").encode()).digest()
                         cursor.execute("INSERT INTO users (username, pwhash) VALUES (?, ?)", (args[1], pwhash))
                         print(f"User '{args[1]}' registered successfully.")
                     else:
@@ -453,7 +456,7 @@ def main():
                         new_password = getpass("New Password: ")
                         confirm_password = getpass("Confirm New Password: ")
                         if new_password == confirm_password:
-                            new_pwhash = hashlib.sha3_512(new_password.encode()).digest()
+                            new_pwhash = sha3_512(new_password.encode()).digest()
                             cursor.execute("UPDATE users SET pwhash=? WHERE username=?", (new_pwhash, args[1]))
                             print(f"Password for user '{args[1]}' changed successfully.")
                         else:    
