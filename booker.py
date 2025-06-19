@@ -48,6 +48,10 @@ def main():
             "args": ["roomIDs"],
             "help": "Delete rooms with specified IDs. Separate IDs with commas without spaces. This command is only available for admin users.",
         },
+        "sql": {
+            "args": ["query"],
+            "help": "Execute a raw SQL query. The SQL query must be quoted. Be careful with this command as it can modify the database.",
+        },
         # Commands usable as standard users
         "cp": {
             "help": "Change the password of the current user.",
@@ -74,11 +78,7 @@ def main():
         "clear": {
             "args": ["roomIDs", "usernames", "start", "end"],
             "help": "Cancel bookings to make available the specified rooms booked by specified users within a given time. Separate IDs and names with commas without spaces. Time inputs must be quoted and in the format of YYYY-MM-DD HH:MM. Standard users can only clear their own bookings.",
-        },
-        "sql": {
-            "args": ["query"],
-            "help": "Execute a raw SQL query. The SQL query must be quoted. Be careful with this command as it can modify the database.",
-        },
+        }
     }
 
     print(info)
@@ -381,25 +381,6 @@ def main():
 
                 cursor.connection.commit()
                 cursor.connection.close()
-
-            elif args[0] == "sql":
-
-                cursor = sqlite3.connect(databasepath).cursor()
-                cursor.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
-
-                try:
-                    result = cursor.execute(args[1]).fetchall()
-                    for row in result:
-                        for colindex in range(len(row)-1):
-                            print(str(row[colindex]).ljust(25))
-                        print(row[-1])
-                    cursor.connection.commit()
-                    print("SQL query executed successfully.")
-                except sqlite3.Error as e:
-                    print(f"Error executing SQL query: {e}")
-                
-                cursor.connection.commit()
-                cursor.connection.close()
                 
             elif isadmin:
 
@@ -532,8 +513,27 @@ def main():
                         else:
                             print("No rooms were deleted.")
                     else:
-                        print("Deletion cancelled.")                  
+                        print("Deletion cancelled.")
+                
+                elif args[0] == "sql":
 
+                    cursor = sqlite3.connect(databasepath).cursor()
+                    cursor.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
+
+                    try:
+                        result = cursor.execute(args[1]).fetchall()
+                        for row in result:
+                            for colindex in range(len(row)-1):
+                                print(str(row[colindex]).ljust(25))
+                            print(row[-1])
+                        cursor.connection.commit()
+                        print("SQL query executed successfully.")
+                    except sqlite3.Error as e:
+                        print(f"Error executing SQL query: {e}")
+                
+                    cursor.connection.commit()
+                    cursor.connection.close()
+                    
             else:
                 print(f"Command '{args[0]}' is not available for standard users.")
         else:
