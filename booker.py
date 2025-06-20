@@ -1,6 +1,3 @@
-# TO-DOs
-# - Error handling
-
 def main():
 
     from shlex import split
@@ -86,6 +83,7 @@ def main():
     print("Type 'help' for a list of commands.")
 
     cursor = sqlite3.connect(databasepath).cursor()
+
     if cursor.execute("SELECT type FROM sqlite_master WHERE type='table' AND name='users'").fetchone() is None:
 
         # Create users table if it does not exist
@@ -95,6 +93,15 @@ def main():
         cursor.execute("INSERT INTO users (username, pwhash, isadmin) VALUES (?, ?, ?)", ("admin", sha3_512(b"admin").digest(), 1))
 
         print("Initialization: Created 'users' table and added default admin user.")
+    
+    if cursor.execute("SELECT type FROM sqlite_master WHERE type='table' AND name='rooms'").fetchone() is None:
+
+       # Create rooms table if it does not exist
+       cursor.execute(
+           "CREATE TABLE rooms (id TEXT PRIMARY KEY)"
+       )
+
+       print("Initialization: Created 'rooms' table.")
 
     if cursor.execute("SELECT type FROM sqlite_master WHERE type='table' AND name='bookings'").fetchone() is None:
 
@@ -103,16 +110,12 @@ def main():
             "CREATE TABLE bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, roomID TEXT, username TEXT, start TEXT NOT NULL, end TEXT NOT NULL, FOREIGN KEY (username) REFERENCES users(username), FOREIGN KEY (roomID) REFERENCES rooms(id))"
         )
 
+        # Create indexes
+        cursor.execute("CREATE INDEX idx_bookings_room_user ON bookings (roomID, username)")
+        cursor.execute("CREATE INDEX idx_bookings_user ON bookings (username)")
+        cursor.execute("CREATE INDEX idx_bookings_time ON bookings (start)")
+
         print("Initialization: Created 'bookings' table.")
-
-    if cursor.execute("SELECT type FROM sqlite_master WHERE type='table' AND name='rooms'").fetchone() is None:
-
-        # Create rooms table if it does not exist
-        cursor.execute(
-            "CREATE TABLE rooms (id VARCHAR(8) PRIMARY KEY)"
-        )
-
-        print("Initialization: Created 'rooms' table.")
 
     cursor.connection.commit()
     cursor.connection.close()
