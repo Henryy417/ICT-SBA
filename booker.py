@@ -1,3 +1,15 @@
+def displayerror(msg): # User must solve this to receive expected results
+    print(f"\33[31m{msg}\33[0m")
+
+def displaysuccess(msg): # User receives expected results
+    print(f"\33[32m{msg}\33[0m")
+
+def displaywarning(msg): # User may want to solve this to receive better results
+    print(f"\33[33m{msg}\33[0m")
+
+def displayinfo(msg): # For program information
+    print(f"\33[34m{msg}\33[0m")
+
 def main():
     from shlex import split
     from getpass import getpass
@@ -91,7 +103,7 @@ def main():
         )
         cursor.execute("INSERT INTO users (username, pwhash, isadmin) VALUES (?, ?, ?)", ("admin", sha3_512(b"admin").digest(), 1))
 
-        print("Initialization: Created 'users' table and added default admin user.")
+        displayinfo("Initialization: Created 'users' table and added default admin user.")
     
     if cursor.execute("SELECT type FROM sqlite_master WHERE type='table' AND name='rooms'").fetchone() is None:
 
@@ -100,7 +112,7 @@ def main():
            "CREATE TABLE rooms (id TEXT PRIMARY KEY)"
        )
 
-       print("Initialization: Created 'rooms' table.")
+       displayinfo("Initialization: Created 'rooms' table.")
 
     if cursor.execute("SELECT type FROM sqlite_master WHERE type='table' AND name='bookings'").fetchone() is None:
 
@@ -114,16 +126,18 @@ def main():
         cursor.execute("CREATE INDEX idx_bookings_user ON bookings (username)")
         cursor.execute("CREATE INDEX idx_bookings_time ON bookings (start)")
 
-        print("Initialization: Created 'bookings' table.")
+        displayinfo("Initialization: Created 'bookings' table.")
 
     cursor.connection.commit()
     cursor.connection.close()
 
-    print()
+    print()  # Print a new line for better readability
+
+    # Main loop for command input
 
     while True:
         # Split input into arguments
-        args = split(input((('\033[31m'+currentuser+'\033[0m' if isadmin else currentuser) if currentuser is not None else "") + "> "))
+        args = split(input((('\33[31m'+currentuser+'\33[0m' if isadmin else currentuser) if currentuser is not None else "") + "> "))
         
         # Ignore empty input
         if len(args) == 0:
@@ -131,12 +145,14 @@ def main():
 
         # Check if command exists
         if args[0] not in commands:
-            print(f"Unknown command '{args[0]}' entered. Type 'help' for a list of commands.")
+            displayerror(f"Unknown command '{args[0]}' entered. Type 'help' for a list of commands.")
+            print()  # Print a new line for better readability
             continue
 
         # Check required number of arguments
         if len(args)-1 != (len(commands[args[0]]['args']) if 'args' in commands[args[0]] else 0):
-            print(f"Command '{args[0]}' requires {len(commands[args[0]]['args']) if 'args' in commands[args[0]] else 0} argument(s). Got {len(args)-1}.")
+            displayerror(f"Command '{args[0]}' requires {len(commands[args[0]]['args']) if 'args' in commands[args[0]] else 0} argument(s). Got {len(args)-1}.")
+            print()  # Print a new line for better readability
             continue
 
         # Handle commnands 
@@ -154,7 +170,7 @@ def main():
                     f"Usage: {args[1]} {"["+"] [".join(commands[args[1]]['args'])+"]" if 'args' in commands[args[1]] else ''}\n\n{commands[args[1]]['help']}"
                 )
             else:
-                print(f"No manual entry for command '{args[1]}'.")
+                displayerror(f"No manual entry for command '{args[1]}'.")
 
         elif args[0] == "exit":
 
@@ -181,9 +197,9 @@ def main():
             if result is not None:
                 currentuser = args[1]
                 isadmin = result[0] == 1
-                print(f"Logged in as '{'\033[31m'+currentuser+'\033[0m' if isadmin else currentuser}'.")
+                displaysuccess(f"Logged in as '{currentuser}'.")
             else:
-                print("Invalid username or password.")
+                displayerror("Invalid username or password.")
 
         elif currentuser is not None:
             if args[0] == "cp":
@@ -196,9 +212,9 @@ def main():
                     cursor.connection.commit()
                     cursor.connection.close()
 
-                    print("Password changed successfully.")
+                    displaysuccess("Password changed successfully.")
                 else:
-                    print("Passwords do not match. Please try again.")
+                    displayerror("Passwords do not match. Please try again.")
 
             elif args[0] == "rooms":
 
@@ -208,11 +224,11 @@ def main():
                 cursor.connection.close()
 
                 if rooms:
-                    print("Rooms found:")
+                    displaysuccess("Rooms found:")
                     for room in rooms:
                         print(room[0])
                 else:
-                    print("No rooms found. Please create rooms using the 'build' command.")
+                    displaywarning("No rooms found. Please create rooms using the 'build' command.")
 
             elif args[0] == "search":
 
@@ -225,10 +241,10 @@ def main():
 
                 params = []
                 if room_ids[0] != '*':
-                    room_ids = [room for room in room_ids if cursor.execute("SELECT id FROM rooms WHERE id=?", (room)).fetchone() is not None or print(f"Room '{room}' does not exist and is skipped.")]
+                    room_ids = [room for room in room_ids if cursor.execute("SELECT id FROM rooms WHERE id=?", (room)).fetchone() is not None or displaywarning(f"Room '{room}' does not exist and is skipped.")]
                     params.extend(room_ids)
                 if user_ids[0] != '*':
-                    user_ids = [user for user in user_ids if cursor.execute("SELECT username FROM users WHERE username=?", (user)).fetchone() is not None or print(f"User '{user}' does not exist and is skipped.")]
+                    user_ids = [user for user in user_ids if cursor.execute("SELECT username FROM users WHERE username=?", (user)).fetchone() is not None or displaywarning(f"User '{user}' does not exist and is skipped.")]
                     params.extend(user_ids)
                 if start != '*':
                     params.append(start)
@@ -242,13 +258,13 @@ def main():
                 cursor.connection.close()
 
                 if bookings:
-                    print("Bookings found:")
+                    displaysuccess("Bookings found:")
                     print("Booking ID".ljust(25)+"Room ID".ljust(25)+"User".ljust(25)+"Start Time".ljust(25)+"End Time".ljust(25))
                     print("---".ljust(25)+"---".ljust(25)+"---".ljust(25)+"---".ljust(25)+"---".ljust(25))
                     for booking in bookings:
                         print(str(booking[0]).ljust(25)+booking[1].ljust(25)+booking[2].ljust(25)+booking[3].ljust(25)+booking[4].ljust(25))
                 else:
-                    print("No bookings found.")
+                    displaysuccess("No bookings found. The time slot is free.")
 
             elif args[0] == "show":
 
@@ -259,20 +275,20 @@ def main():
                 for booking_id in booking_ids:
                     booking = cursor.execute("SELECT * FROM bookings WHERE id=?", (booking_id)).fetchone()
                     if booking is None:
-                        print(f"Booking ID '{booking_id}' does not exist and is skipped.")
+                        displaywarning(f"Booking ID '{booking_id}' does not exist and is skipped.")
                         continue
                     bookings.append(booking)
                 cursor.connection.commit()
                 cursor.connection.close()
 
                 if bookings:
-                    print("Bookings found:")
+                    displaysuccess("Bookings found:")
                     print("Booking ID".ljust(25)+"Room ID".ljust(25)+"User".ljust(25)+"Start Time".ljust(25)+"End Time".ljust(25))
                     print("---".ljust(25)+"---".ljust(25)+"---".ljust(25)+"---".ljust(25)+"---".ljust(25))
                     for booking in bookings:
                         print(str(booking[0]).ljust(25)+booking[1].ljust(25)+booking[2].ljust(25)+booking[3].ljust(25)+booking[4].ljust(25))
                 else:
-                    print("No bookings found.")
+                    displayerror("No bookings found.")
 
             elif args[0] == "book":
 
@@ -288,28 +304,28 @@ def main():
 
                         for room_id in room_ids:
                             if cursor.execute("SELECT id FROM rooms WHERE id=?", (room_id)).fetchone() is None:
-                                print(f"Room '{room_id}' does not exist and is skipped.")
+                                displaywarning(f"Room '{room_id}' does not exist and is skipped.")
                                 continue
                             
                             booked = cursor.execute(f"SELECT id FROM bookings WHERE roomID = {room_id} AND substr(timediff(?, end),1,1) = '-' AND substr(timediff(start, ?),1,1) = '-'", (start, end)).fetchone()
 
                             if booked is not None:
-                                print(f"Time slot is already booked (Booking ID: {booked[0]}) for room {room_id} and is skipped.")
+                                displaywarning(f"Time slot is already booked (Booking ID: {booked[0]}) for room {room_id} and is skipped.")
                                 continue
 
                             actual_room_ids.append(room_id)
                             cursor.execute("INSERT INTO bookings (roomID, username, start, end) VALUES (?, ?, strftime('%F %R', ?), strftime('%F %R', ?))", (room_id, currentuser, start, end))
 
                         if actual_room_ids:
-                            print(f"Booking(s) for the following room(s) created successfully:")
+                            displaysuccess(f"Booking(s) for the following room(s) created successfully:")
                             print("\t".join(actual_room_ids))
 
                         else:
-                            print("No bookings were created. Please check the time slot and room IDs.")
+                            displayerror("No bookings were created. Please check the time slot and room IDs.")
                     else:
-                        print("Time slot is invalid. The end time must be after the start time.")
+                        displayerror("Time slot is invalid. The end time must be after the start time.")
                 else:
-                    print("Invalid time format. Please use 'YYYY-MM-DD HH:MM'.")
+                    displayerror("Invalid time format. Please use 'YYYY-MM-DD HH:MM'.")
 
                 cursor.connection.commit()
                 cursor.connection.close()
@@ -324,10 +340,10 @@ def main():
                 for booking_id in booking_ids:
                     booking = cursor.execute("SELECT username FROM bookings WHERE id=?", (booking_id)).fetchone()
                     if booking is None:
-                        print(f"Booking ID '{booking_id}' does not exist and is skipped.")
+                        displaywarning(f"Booking ID '{booking_id}' does not exist and is skipped.")
                         continue
                     if booking[0] != currentuser and not isadmin:
-                        print(f"You can only cancel your own bookings as a standard user. Booking ID '{booking_id}' is skipped.")
+                        displaywarning(f"You can only cancel your own bookings as a standard user. Booking ID '{booking_id}' is skipped.")
                         continue
                     actual_booking_ids.append(booking_id)
                     cursor.execute("DELETE FROM bookings WHERE id=?", (booking_id))
@@ -336,10 +352,10 @@ def main():
                 cursor.connection.close()
 
                 if actual_booking_ids:
-                    print(f"The following bookings are cancelled successfully:")
+                    displaysuccess(f"The following bookings are cancelled successfully:")
                     print("\t".join(actual_booking_ids))
                 else:
-                    print("No bookings were cancelled.")
+                    displayerror("No bookings were cancelled.")
 
             elif args[0] == "clear":
 
@@ -353,10 +369,10 @@ def main():
 
                 params = []
                 if room_ids[0] != '*':
-                    room_ids = [room for room in room_ids if cursor.execute("SELECT id FROM rooms WHERE id=?", (room)).fetchone() is not None or print(f"Room '{room}' does not exist and is skipped.")]
+                    room_ids = [room for room in room_ids if cursor.execute("SELECT id FROM rooms WHERE id=?", (room)).fetchone() is not None or displaywarning(f"Room '{room}' does not exist and is skipped.")]
                     params.extend(room_ids)
                 if user_ids[0] != '*':
-                    user_ids = [user for user in user_ids if cursor.execute("SELECT username FROM users WHERE username=?", (user)).fetchone() is not None or print(f"User '{user}' does not exist and is skipped.")]
+                    user_ids = [user for user in user_ids if cursor.execute("SELECT username FROM users WHERE username=?", (user)).fetchone() is not None or displaywarning(f"User '{user}' does not exist and is skipped.")]
                     params.extend(user_ids)
                 if start != '*':
                     params.append(start)
@@ -370,16 +386,16 @@ def main():
                 if bookings:
                     for booking in bookings:
                         if booking[1] != currentuser and not isadmin:
-                            print(f"You can only clear your own bookings as a standard user. Booking ID '{booking[0]}' is skipped.")
+                            displaywarning(f"You can only clear your own bookings as a standard user. Booking ID '{booking[0]}' is skipped.")
                             continue
                         actual_booking_ids.append(booking[0])
                         cursor.execute("DELETE FROM bookings WHERE id=?", (booking[0]))
 
                 if actual_booking_ids:
-                    print(f"The following bookings are cleared successfully:")
+                    displaysuccess(f"The following bookings are cleared successfully:")
                     print("\t".join(actual_booking_ids))
                 else:
-                    print("No bookings were cleared.")
+                    displayerror("No bookings were cleared.")
 
                 cursor.connection.commit()
                 cursor.connection.close()
@@ -393,16 +409,16 @@ def main():
                     if cursor.execute("SELECT username FROM users WHERE username=?", (args[1])).fetchone() is None:
                         pwhash = sha3_512(getpass("Password: ").encode()).digest()
                         cursor.execute("INSERT INTO users (username, pwhash) VALUES (?, ?)", (args[1], pwhash))
-                        print(f"User '{args[1]}' registered successfully.")
+                        displaysuccess(f"User '{args[1]}' registered successfully.")
                     else:
-                        print(f"User '{args[1]}' already exists. Please choose a different username.")
+                        displayerror(f"User '{args[1]}' already exists. Please choose a different username.")
 
                     cursor.connection.commit()
                     cursor.connection.close()                
 
                 elif args[0] == "dereg":
 
-                    if input(f"Are you sure you want to deregister the following users: {args[1]}? Their bookings will be as well cancelled. (yes/no): ").lower() == "yes":
+                    if input(f"Are you sure you want to deregister the following users: {args[1]}? Their bookings will be as well cancelled. Enter 'yes' to confirm, anything else to cancel: ").lower() == "yes":
                         usernames = args[1].split(',')
                         actual_usernames = []
 
@@ -411,10 +427,10 @@ def main():
 
                         for username in usernames:
                             if cursor.execute("SELECT username FROM users WHERE username=?", (username)).fetchone() is None:
-                                print(f"User '{username}' does not exist and is skipped.")
+                                displaywarning(f"User '{username}' does not exist and is skipped.")
                                 continue
                             elif username == currentuser:
-                                print(f"You cannot deregister yourself. Please log in as another user first. Your username is skipped.")
+                                displaywarning(f"You cannot deregister yourself. Please log in as another user first. Your username is skipped.")
                                 continue
                             actual_usernames.append(username)
                             cursor.execute("DELETE FROM bookings WHERE username=?", (username))
@@ -424,12 +440,12 @@ def main():
                         cursor.connection.close()
 
                         if actual_usernames:
-                            print(f"The following users are deregistered successfully:")
+                            displaysuccess(f"The following users are deregistered successfully:")
                             print("\t".join(actual_usernames))
                         else:
-                            print("No users were deregistered.")
+                            displayerror("No users were deregistered.")
                     else:
-                        print("Deregistration cancelled.")
+                        displayerror("Deregistration cancelled.")
                 
                 elif args[0] == "cpx":
 
@@ -441,11 +457,11 @@ def main():
                         if new_password == confirm_password:
                             new_pwhash = sha3_512(new_password.encode()).digest()
                             cursor.execute("UPDATE users SET pwhash=? WHERE username=?", (new_pwhash, args[1]))
-                            print(f"Password for user '{args[1]}' changed successfully.")
+                            displaysuccess(f"Password for user '{args[1]}' changed successfully.")
                         else:    
-                            print("Passwords do not match. Please try again.")
+                            displayerror("Passwords do not match. Please try again.")
                     else:
-                        print(f"User '{args[1]}' does not exist.")
+                        displayerror(f"User '{args[1]}' does not exist.")
                     
                     cursor.connection.commit()
                     cursor.connection.close()
@@ -458,13 +474,13 @@ def main():
                     cursor.connection.close()
 
                     if users:
-                        print("Users found:")
+                        displaysuccess("Users found:")
                         print("Username".ljust(25)+"Admin")
                         print("---".ljust(25)+"---".ljust(25))
                         for user in users:
                             print(user[0].ljust(25)+("Yes" if user[1] else "No").ljust(25))
                     else:
-                        print("No users found.")
+                        displaywarning("No users found. Please register users using the 'reg' command.")
 
                 elif args[0] == "build":
 
@@ -475,7 +491,7 @@ def main():
                     
                     for room_id in room_ids:
                         if cursor.execute("SELECT id FROM rooms WHERE id=?", (room_id)).fetchone() is not None:
-                            print(f"Room '{room_id}' already exists and is skipped.")
+                            displaywarning(f"Room '{room_id}' already exists and is skipped.")
                             continue
                         actual_room_ids.append(room_id)
                         cursor.execute("INSERT INTO rooms (id) VALUES (?)", (room_id))
@@ -484,14 +500,14 @@ def main():
                     cursor.connection.close()
 
                     if actual_room_ids:
-                        print(f"The following rooms are created successfully:")
+                        displaysuccess(f"The following rooms are created successfully:")
                         print("\t".join(actual_room_ids))
                     else:
-                        print("No rooms were created.")
+                        displayerror("No rooms were created.")
 
                 elif args[0] == "destroy":
 
-                    if input(f"Are you sure you want to delete the following rooms: {args[1]}? Their bookings will be as well cancelled. (yes/no): ").lower() == "yes":
+                    if input(f"Are you sure you want to delete the following rooms: {args[1]}? Their bookings will be as well cancelled. Enter 'yes' to confirm, anything else to cancel: ").lower() == "yes":
                         room_ids = args[1].split(',')
                         actual_room_ids = []
 
@@ -500,7 +516,7 @@ def main():
 
                         for room_id in room_ids:
                             if cursor.execute("SELECT id FROM rooms WHERE id=?", (room_id)).fetchone() is None:
-                                print(f"Room '{room_id}' does not exist and is skipped.")
+                                displaywarning(f"Room '{room_id}' does not exist and is skipped.")
                                 continue
                             actual_room_ids.append(room_id)
                             cursor.execute("DELETE FROM bookings WHERE roomID=?", (room_id))
@@ -510,12 +526,12 @@ def main():
                         cursor.connection.close()
 
                         if actual_room_ids:
-                            print(f"The following rooms are deleted successfully:")
+                            displaysuccess(f"The following rooms are deleted successfully:")
                             print("\t".join(actual_room_ids))
                         else:
-                            print("No rooms were deleted.")
+                            displayerror("No rooms were deleted.")
                     else:
-                        print("Deletion cancelled.")
+                        displayerror("Deletion cancelled.")
                 
                 elif args[0] == "sql":
 
@@ -529,20 +545,19 @@ def main():
                                 print(str(row[colindex]).ljust(25))
                             print(row[-1])
                         cursor.connection.commit()
-                        print("SQL query executed successfully.")
+                        displaysuccess("SQL query executed successfully.")
                     except sqlite3.Error as e:
-                        print(f"Error executing SQL query: \033[31m{e}\033[0m")
+                        displayerror(f"Error executing SQL query:\n{e}")
                 
                     cursor.connection.commit()
                     cursor.connection.close()
                     
             else:
-                print(f"Command '{args[0]}' is not available for standard users.")
+                displayerror(f"Command '{args[0]}' is not available for standard users.")
         else:
-            print(f"You must be logged in to use the command '{args[0]}'. Use 'login' to log in as a user first.")
+            displayerror(f"You must be logged in to use the command '{args[0]}'. Use 'login' to log in as a user first.")
 
-        print()
-
+        print()  # Print a new line for better readability
 
 
 
@@ -551,18 +566,17 @@ if __name__ == "__main__":
     try:
         main()
     except:
-        from traceback import print_exc
         from os import path
         from datetime import datetime
+        import traceback
 
-        print("\033[31mProgram terminated due to unexpectedly error.\033[0m")
-        print("Error info:")
-        print_exc()
+        displayerror(f"Program terminated due to unexpectedly error.\nError info:\n{traceback.format_exc()}")
         with open(path.realpath(path.dirname(__file__))+"/error.log", "a") as f:
             f.write(str(datetime.now())+"\n")
-            print_exc(file=f)
+            traceback.print_exc(file=f)
             f.write("\n\n\n")
 
         exit(1)
 else:
-    print("Booker cannot be imported as a module.")
+    displayerror("Booker cannot be imported as a module.")
+    exit(1)
