@@ -241,10 +241,10 @@ def main():
 
                 params = []
                 if room_ids[0] != '*':
-                    room_ids = [room for room in room_ids if cursor.execute("SELECT id FROM rooms WHERE id=?", (room)).fetchone() is not None or displaywarning(f"Room '{room}' does not exist and is skipped.")]
+                    room_ids = [room for room in room_ids if cursor.execute("SELECT id FROM rooms WHERE id=?", [room]).fetchone() is not None or displaywarning(f"Room '{room}' does not exist and is skipped.")]
                     params.extend(room_ids)
                 if user_ids[0] != '*':
-                    user_ids = [user for user in user_ids if cursor.execute("SELECT username FROM users WHERE username=?", (user)).fetchone() is not None or displaywarning(f"User '{user}' does not exist and is skipped.")]
+                    user_ids = [user for user in user_ids if cursor.execute("SELECT username FROM users WHERE username=?", [user]).fetchone() is not None or displaywarning(f"User '{user}' does not exist and is skipped.")]
                     params.extend(user_ids)
                 if start != '*':
                     params.append(start)
@@ -273,7 +273,7 @@ def main():
 
                 cursor = sqlite3.connect(databasepath).cursor()
                 for booking_id in booking_ids:
-                    booking = cursor.execute("SELECT * FROM bookings WHERE id=?", (booking_id)).fetchone()
+                    booking = cursor.execute("SELECT * FROM bookings WHERE id=?", [booking_id]).fetchone()
                     if booking is None:
                         displaywarning(f"Booking ID '{booking_id}' does not exist and is skipped.")
                         continue
@@ -303,7 +303,7 @@ def main():
                     if cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (end, start)).fetchone()[0] == "+":
 
                         for room_id in room_ids:
-                            if cursor.execute("SELECT id FROM rooms WHERE id=?", (room_id)).fetchone() is None:
+                            if cursor.execute("SELECT id FROM rooms WHERE id=?", [room_id]).fetchone() is None:
                                 displaywarning(f"Room '{room_id}' does not exist and is skipped.")
                                 continue
                             
@@ -338,7 +338,7 @@ def main():
                 cursor = sqlite3.connect(databasepath).cursor()
 
                 for booking_id in booking_ids:
-                    booking = cursor.execute("SELECT username FROM bookings WHERE id=?", (booking_id)).fetchone()
+                    booking = cursor.execute("SELECT username FROM bookings WHERE id=?", [booking_id]).fetchone()
                     if booking is None:
                         displaywarning(f"Booking ID '{booking_id}' does not exist and is skipped.")
                         continue
@@ -346,7 +346,7 @@ def main():
                         displaywarning(f"You can only cancel your own bookings as a standard user. Booking ID '{booking_id}' is skipped.")
                         continue
                     actual_booking_ids.append(booking_id)
-                    cursor.execute("DELETE FROM bookings WHERE id=?", (booking_id))
+                    cursor.execute("DELETE FROM bookings WHERE id=?", [booking_id])
 
                 cursor.connection.commit()
                 cursor.connection.close()
@@ -369,10 +369,10 @@ def main():
 
                 params = []
                 if room_ids[0] != '*':
-                    room_ids = [room for room in room_ids if cursor.execute("SELECT id FROM rooms WHERE id=?", (room)).fetchone() is not None or displaywarning(f"Room '{room}' does not exist and is skipped.")]
+                    room_ids = [room for room in room_ids if cursor.execute("SELECT id FROM rooms WHERE id=?", [room]).fetchone() is not None or displaywarning(f"Room '{room}' does not exist and is skipped.")]
                     params.extend(room_ids)
                 if user_ids[0] != '*':
-                    user_ids = [user for user in user_ids if cursor.execute("SELECT username FROM users WHERE username=?", (user)).fetchone() is not None or displaywarning(f"User '{user}' does not exist and is skipped.")]
+                    user_ids = [user for user in user_ids if cursor.execute("SELECT username FROM users WHERE username=?", [user]).fetchone() is not None or displaywarning(f"User '{user}' does not exist and is skipped.")]
                     params.extend(user_ids)
                 if start != '*':
                     params.append(start)
@@ -389,7 +389,7 @@ def main():
                             displaywarning(f"You can only clear your own bookings as a standard user. Booking ID '{booking[0]}' is skipped.")
                             continue
                         actual_booking_ids.append(booking[0])
-                        cursor.execute("DELETE FROM bookings WHERE id=?", (booking[0]))
+                        cursor.execute("DELETE FROM bookings WHERE id=?", [booking[0]])
 
                 if actual_booking_ids:
                     displaysuccess(f"The following bookings are cleared successfully:")
@@ -406,7 +406,7 @@ def main():
                     
                     cursor = sqlite3.connect(databasepath).cursor()
 
-                    if cursor.execute("SELECT username FROM users WHERE username=?", (args[1])).fetchone() is None:
+                    if cursor.execute("SELECT username FROM users WHERE username=?", [args[1]]).fetchone() is None:
                         pwhash = sha3_512(getpass("Password: ").encode()).digest()
                         cursor.execute("INSERT INTO users (username, pwhash) VALUES (?, ?)", (args[1], pwhash))
                         displaysuccess(f"User '{args[1]}' registered successfully.")
@@ -426,15 +426,15 @@ def main():
                         cursor.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
 
                         for username in usernames:
-                            if cursor.execute("SELECT username FROM users WHERE username=?", (username)).fetchone() is None:
+                            if cursor.execute("SELECT username FROM users WHERE username=?", [username]).fetchone() is None:
                                 displaywarning(f"User '{username}' does not exist and is skipped.")
                                 continue
                             elif username == currentuser:
                                 displaywarning(f"You cannot deregister yourself. Please log in as another user first. Your username is skipped.")
                                 continue
                             actual_usernames.append(username)
-                            cursor.execute("DELETE FROM bookings WHERE username=?", (username))
-                            cursor.execute("DELETE FROM users WHERE username=?", (username))
+                            cursor.execute("DELETE FROM bookings WHERE username=?", [username])
+                            cursor.execute("DELETE FROM users WHERE username=?", [username])
                             
                         cursor.connection.commit()
                         cursor.connection.close()
@@ -451,7 +451,7 @@ def main():
 
                     cursor = sqlite3.connect(databasepath).cursor()
 
-                    if cursor.execute("SELECT username FROM users WHERE username=?", (args[1])).fetchone() is not None:
+                    if cursor.execute("SELECT username FROM users WHERE username=?", [args[1]]).fetchone() is not None:
                         new_password = getpass("New Password: ")
                         confirm_password = getpass("Confirm New Password: ")
                         if new_password == confirm_password:
@@ -490,11 +490,11 @@ def main():
                     cursor = sqlite3.connect(databasepath).cursor()
                     
                     for room_id in room_ids:
-                        if cursor.execute("SELECT id FROM rooms WHERE id=?", (room_id)).fetchone() is not None:
+                        if cursor.execute("SELECT id FROM rooms WHERE id=?", [room_id]).fetchone() is not None:
                             displaywarning(f"Room '{room_id}' already exists and is skipped.")
                             continue
                         actual_room_ids.append(room_id)
-                        cursor.execute("INSERT INTO rooms (id) VALUES (?)", (room_id))
+                        cursor.execute("INSERT INTO rooms (id) VALUES (?)", [room_id])
 
                     cursor.connection.commit()
                     cursor.connection.close()
@@ -515,12 +515,12 @@ def main():
                         cursor.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
 
                         for room_id in room_ids:
-                            if cursor.execute("SELECT id FROM rooms WHERE id=?", (room_id)).fetchone() is None:
+                            if cursor.execute("SELECT id FROM rooms WHERE id=?", [room_id]).fetchone() is None:
                                 displaywarning(f"Room '{room_id}' does not exist and is skipped.")
                                 continue
                             actual_room_ids.append(room_id)
-                            cursor.execute("DELETE FROM bookings WHERE roomID=?", (room_id))
-                            cursor.execute("DELETE FROM rooms WHERE id=?", (room_id))
+                            cursor.execute("DELETE FROM bookings WHERE roomID=?", [room_id])
+                            cursor.execute("DELETE FROM rooms WHERE id=?", [room_id])
 
                         cursor.connection.commit()
                         cursor.connection.close()
