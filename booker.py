@@ -418,7 +418,7 @@ def main():
 
                 elif args[0] == "dereg":
 
-                    if input(f"Are you sure you want to deregister the following users: {args[1]}? Their bookings will be as well cancelled. Enter 'yes' to confirm, anything else to cancel: ").lower() == "yes":
+                    if input(f"Are you sure you want to deregister the users? Their bookings will be as well cancelled. Enter 'yes' to confirm, anything else to cancel: ").lower() == "yes":
                         usernames = args[1].split(',')
                         actual_usernames = []
 
@@ -507,7 +507,7 @@ def main():
 
                 elif args[0] == "destroy":
 
-                    if input(f"Are you sure you want to delete the following rooms: {args[1]}? Their bookings will be as well cancelled. Enter 'yes' to confirm, anything else to cancel: ").lower() == "yes":
+                    if input(f"Are you sure you want to delete the rooms? Their bookings will be as well cancelled. Enter 'yes' to confirm, anything else to cancel: ").lower() == "yes":
                         room_ids = args[1].split(',')
                         actual_room_ids = []
 
@@ -565,6 +565,9 @@ def main():
 if __name__ == "__main__":
     try:
         main()
+    except KeyboardInterrupt:
+        displayinfo("Program terminated by user.")
+        exit(0)
     except:
         from os import path
         from datetime import datetime
