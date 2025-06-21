@@ -1,5 +1,4 @@
 def main():
-
     from shlex import split
     from getpass import getpass
     from hashlib import sha3_512
@@ -532,7 +531,7 @@ def main():
                         cursor.connection.commit()
                         print("SQL query executed successfully.")
                     except sqlite3.Error as e:
-                        print(f"Error executing SQL query: {e}")
+                        print(f"Error executing SQL query: \033[31m{e}\033[0m")
                 
                     cursor.connection.commit()
                     cursor.connection.close()
@@ -549,6 +548,21 @@ def main():
 
 # Make sure the script can only be run as a standalone program
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except:
+        from traceback import print_exc
+        from os import path
+        from datetime import datetime
+
+        print("\033[31mProgram terminated due to unexpectedly error.\033[0m")
+        print("Error info:")
+        print_exc()
+        with open(path.realpath(path.dirname(__file__))+"/error.log", "a") as f:
+            f.write(str(datetime.now())+"\n")
+            print_exc(file=f)
+            f.write("\n\n\n")
+
+        exit(1)
 else:
     print("Booker cannot be imported as a module.")
