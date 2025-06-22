@@ -571,12 +571,12 @@ if __name__ == "__main__":
     except:
         from os import path
         from datetime import datetime
-        import traceback
+        from traceback import format_exc, print_exc
 
-        displayerror(f"Program terminated due to unexpectedly error.\nError info:\n{traceback.format_exc()}")
+        displayerror(f"Program terminated due to unexpectedly error.\nError info:\n{format_exc()}")
         with open(path.realpath(path.dirname(__file__))+"/error.log", "a") as f:
             f.write(str(datetime.now())+"\n")
-            traceback.print_exc(file=f)
+            print_exc(file=f)
             f.write("\n\n\n")
 
         exit(1)
