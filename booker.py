@@ -1,13 +1,13 @@
-def displayerror(msg): # User must solve this to receive expected results
+def displayerror(msg): # Error Message: User must solve this to receive expected results
     print(f"\33[31m{msg}\33[0m")
 
-def displaysuccess(msg): # User receives expected results
+def displaysuccess(msg): # Success Message: User receives expected results
     print(f"\33[32m{msg}\33[0m")
 
-def displaywarning(msg): # User may want to solve this to receive better results
+def displaywarning(msg): # Warning Message: User may want to solve this to receive better results
     print(f"\33[33m{msg}\33[0m")
 
-def displayinfo(msg): # For program information
+def displayinfo(msg): # Information Message: User may want to know this but nothing is wrong nor actions needed
     print(f"\33[34m{msg}\33[0m")
 
 def main():
@@ -145,15 +145,30 @@ def main():
 
         # Check if command exists
         if args[0] not in commands:
-            displayerror(f"Unknown command '{args[0]}' entered. Type 'help' for a list of commands.")
-            print()  # Print a new line for better readability
-            continue
+            possiblecmds = []
+            for cmd in commands:
+                if cmd.startswith(args[0]):
+                        possiblecmds.append(cmd)
+            if len(possiblecmds) == 0:
+                displayerror(f"Command or abbreviation '{args[0]}' not found. Type 'help' for a list of commands.")
+                print()  # Print a new line for better readability
+                continue
+            elif len(possiblecmds) == 1:
+                args[0] = possiblecmds[0]
+            else:
+                displayerror(f"Command abbreviation '{args[0]}' is ambiguous. Which of the following commands did you mean: {', '.join(possiblecmds)}?")
+                print()  # Print a new line for better readability
+                continue
 
         # Check required number of arguments
         if len(args)-1 != (len(commands[args[0]]['args']) if 'args' in commands[args[0]] else 0):
-            displayerror(f"Command '{args[0]}' requires {len(commands[args[0]]['args']) if 'args' in commands[args[0]] else 0} argument(s). Got {len(args)-1}.")
-            print()  # Print a new line for better readability
-            continue
+            if len(args)-1 < len(commands[args[0]]['args']):
+                for _ in range(len(commands[args[0]]['args']) - (len(args)-1)):
+                    args.append('*') # Fill with wildcard '*' if not enough arguments are provided
+            else:
+                displayerror(f"Command '{args[0]}' requires {len(commands[args[0]]['args']) if 'args' in commands[args[0]] else 0} argument(s). Got {len(args)-1}.")
+                print()  # Print a new line for better readability
+                continue
 
         # Handle commnands 
         if args[0] == "help":
