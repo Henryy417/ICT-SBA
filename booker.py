@@ -14,10 +14,11 @@ def main():
     from shlex import split
     from getpass import getpass
     from hashlib import sha3_512
+    from datetime import datetime
     import sqlite3
     import os
 
-    info = "Booker v1.0.0"
+    info = "Booker v1.1"
     copyright = "Copyright (c) 2025 Chen Hang Tsz Henry"
     databasepath = os.path.realpath(os.path.dirname(__file__))+"/data.db"
 
@@ -27,71 +28,85 @@ def main():
     commands = {
         # Commands usable before login
         "help": {"help": "Show help message."},
-        "man": {"args": ["command"], "help": "Show manual for a specific command."},
+        "man": {"args": {"command": {"format": "text"}}, "help": "Show manual for a specific command."},
         "exit": {"help": "Exit Booker."},
         "ver": {"help": "Show current version info."},
         "cls": {"help": "Clear the screen."},
-        "login": {"args": ["username"], "help": "Log in as a user."},
+        "login": {"args": {"username": {"format": "text"}}, "help": "Log in as a user."},
         # Commands usable as admins
         "reg": {
-            "args": ["username"],
-            "help": "Register a new user. This command is only available for admin users.",
+            "args": {"username": {"format": "text"}},
+            "help": "Register a new user. This command is only available for admin users."
         },
         "dereg": {
-            "args": ["usernames"],
-            "help": "Deregister users. Separate names with commas without spaces. This command is only available for admin users.",
+            "args": {"username": {"format": "csv", "wildcard": True}},
+            "help": "Deregister users. This command is only available for admin users.",
         },
         "cpx": {
-            "args": ["username"],
-            "help": "Change the password of a user. This command is only available for admin users.",
+            "args": {"username": {"format": "text", "default": currentuser}},
+            "help": "Change the password of a user. Defaults to the current user if no username is provided. This command is only available for admin users."
         },
         "users": {
             "help": "List all users. This command is only available for admin users.",
         },
         "build": {
-            "args": ["roomIDs"],
-            "help": "Create new rooms with specified IDs. Separate IDs with commas without spaces. This command is only available for admin users.",
+            "args": {"roomIDs": {"format": "csv"}},
+            "help": "Create new rooms with specified IDs. This command is only available for admin users.",
         },
         "destroy": {
-            "args": ["roomIDs"],
-            "help": "Delete rooms with specified IDs. Separate IDs with commas without spaces. This command is only available for admin users.",
+            "args": {"roomIDs": {"format": "csv", "wildcard": True}},
+            "help": "Delete rooms with specified IDs. This command is only available for admin users.",
         },
         "sql": {
-            "args": ["query"],
+            "args": {"query": {"format": "text"}},
             "help": "Execute a raw SQL query. The SQL query must be quoted. Be careful with this command as it can modify the database.",
         },
         # Commands usable as standard users
         "cp": {
-            "help": "Change the password of the current user.",
+            "help": "Change the password of the current user."
         },
         "rooms": {
             "help": "List all rooms.",
         },
         "search": {
-            "args": ["roomIDs", "usernames", "start", "end"],
-            "help": "List bookings of the specified rooms booked by specified users within a given time. Separate IDs and names with commas without spaces. Time inputs must be quoted and in the format of YYYY-MM-DD HH:MM. Wildcard * can be used. e.g. 'list * * * *' will list all bookings.",
+            "args": {
+                "roomIDs": {"format": "csv", "wildcard": True, "default": "*"},
+                "usernames": {"format": "csv", "wildcard": True, "default": "*"},
+                "start": {"format": "time", "wildcard": True, "default": "*"},
+                "end": {"format": "time", "wildcard": True, "default": "*"}
+            },
+            "help": "List bookings of the specified rooms booked by specified users within a given time.",
         },
         "show": {
-            "args": ["bookingIDs"],
-            "help": "Show bookings of specified booking IDs. Separate IDs with commas without spaces.",
+            "args": {"bookingIDs": {"format": "csv", "wildcard": True}},
+            "help": "Show bookings of specified booking IDs.",
         },
         "book": {
-            "args": ["roomIDs", "start", "end"],
-            "help": "Make a reservation for specified rooms at a given time. Separate IDs with commas without spaces. Time inputs must be quoted and in the format of YYYY-MM-DD HH:MM.",
+            "args": {
+                "roomIDs": {"format": "csv"},
+                "start": {"format": "time"},
+                "end": {"format": "time"}
+            },
+            "help": "Make a reservation for specified rooms at a given time.",
         },
         "cancel": {
-            "args": ["bookingIDs"],
-            "help": "Cancel bookings by booking IDs. Separate IDs with commas without spaces. Standard users can only cancel their own bookings."
+            "args": {"bookingIDs": {"format": "csv", "wildcard": True}},
+            "help": "Cancel bookings by booking IDs. Standard users can only cancel their own bookings.",
         },
         "clear": {
-            "args": ["roomIDs", "usernames", "start", "end"],
-            "help": "Cancel bookings to make available the specified rooms booked by specified users within a given time. Separate IDs and names with commas without spaces. Time inputs must be quoted and in the format of YYYY-MM-DD HH:MM. Standard users can only clear their own bookings.",
+            "args": {
+                "roomIDs": {"format": "csv", "wildcard": True},
+                "usernames": {"format": "csv", "wildcard": True},
+                "start": {"format": "time", "wildcard": True},
+                "end": {"format": "time", "wildcard": True}
+            },
+            "help": "Cancel bookings to make available the specified rooms booked by specified users within a given time. Standard users can only clear their own bookings."
         }
     }
 
     print(info)
     print(copyright)
-    print("Type 'help' for a list of commands.")
+    displayinfo("Type 'help' for a list of commands.")
 
     cursor = sqlite3.connect(databasepath).cursor()
 
@@ -137,7 +152,13 @@ def main():
 
     while True:
         # Split input into arguments
-        args = split(input((('\33[31m'+currentuser+'\33[0m' if isadmin else currentuser) if currentuser is not None else "") + "> "))
+        try:
+            args = split(input((('\33[31m'+currentuser+'\33[0m' if isadmin else currentuser) if currentuser is not None else "") + "> "))
+        except ValueError:
+            displayerror("Invalid input. Looks like you forget a closing quote somewhere, or escape characters are not used properly.")
+            displayerror("Quotes and backslashes, when used literally, should be escaped with a backslash (\\).")
+            print()
+            continue
         
         # Ignore empty input
         if len(args) == 0:
@@ -155,24 +176,42 @@ def main():
                 continue
             elif len(possiblecmds) == 1:
                 args[0] = possiblecmds[0]
+                displayinfo(f"Command abbreviation interpreted as '{possiblecmds[0]}'.")
+                print()  # Print a new line for better readability
             else:
                 displayerror(f"Command abbreviation '{args[0]}' is ambiguous. Which of the following commands did you mean: {', '.join(possiblecmds)}?")
                 print()  # Print a new line for better readability
                 continue
 
-        # Check required number of arguments
-        if len(args)-1 != (len(commands[args[0]]['args']) if 'args' in commands[args[0]] else 0):
-            if len(args)-1 < len(commands[args[0]]['args']):
-                for _ in range(len(commands[args[0]]['args']) - (len(args)-1)):
-                    args.append('*') # Fill with wildcard '*' if not enough arguments are provided
+        # Check required number of arguments and fill defaults if necessary
+        if len(args)-1 < (len(commands[args[0]]['args']) if 'args' in commands[args[0]] else 0):
+            defaults_available = True
+            for _ in range(len(args)-1, len(commands[args[0]]['args'])):
+                if 'default' not in commands[args[0]]['args'].items()[_]:
+                    defaults_available = False
+                    break
+            if defaults_available:
+                for i in range(len(args)-1, len(commands[args[0]]['args'])):
+                    args.append(commands[args[0]]['args'].items()[i]["default"])
+                displayinfo(f"Default values filled. Actually running: {args[0]} {' '.join(args[1:])}")
+                print()  # Print a new line for better readability
             else:
                 displayerror(f"Command '{args[0]}' requires {len(commands[args[0]]['args']) if 'args' in commands[args[0]] else 0} argument(s). Got {len(args)-1}.")
                 print()  # Print a new line for better readability
                 continue
+        elif len(args)-1 > (len(commands[args[0]]['args']) if 'args' in commands[args[0]] else 0):
+            displaywarning(f"Command '{args[0]}' requires only {len(commands[args[0]]['args']) if 'args' in commands[args[0]] else 0} argument(s). Got {len(args)-1}.")
+            print()
 
-        # Handle commnands 
+        # Handle commands
         if args[0] == "help":
 
+            print("Use 'man' to receive more information about a specific command.\n")
+            print("Command abbreviations are allowed. Enter the first few letters of a command. Note that the parser tries to see the input as a complete command before seeking a possible abbreviation.\n")
+            print("Default values of arguments, if exist, will be filled when not enough arguments are provided.\n")
+            print("\33[3mcsv\33[0m values, commonly seen if more than one value is allowed in an argument (e.g. IDs), are separated by commas without spaces. e.g. 'room1,room2,room3'.\n")
+            print("\33[3mtime\33[0m values must be in the format 'YYYY-MM-DD HH:MM'. e.g. '2008-04-17 12:00'.\n")
+            print("Wildcard '*' usually means \33[3mall\33[0m. For some time input, it can be used to remove respective time constraints according to context. e.g. Using '*' as start time and '2008-04-17' as end time means every record until '2008-04-17'.\n")
             print("Command".ljust(25)+"Description")
             print("---".ljust(25)+"---")
             for cmd, details in commands.items():
@@ -181,9 +220,15 @@ def main():
         elif args[0] == "man":
 
             if args[1] in commands:
-                print(
-                    f"Usage: {args[1]} {"["+"] [".join(commands[args[1]]['args'])+"]" if 'args' in commands[args[1]] else ''}\n\n{commands[args[1]]['help']}"
-                )
+                print("Usage:")
+                syntax_text = args[1]+" "
+                if 'args' in commands[args[1]]:
+                    for arg, prop in commands[args[1]]["args"].items():
+                        syntax_text += f"[{prop['format']}{"|*" if 'wildcard' in prop else ''}: {arg}{"="+str(prop.get('default')) if 'default' in prop else ''}] "
+                print(syntax_text.strip())
+                print("\nDescription:")
+                print(commands[args[1]]['help'])
+
             else:
                 displayerror(f"No manual entry for command '{args[1]}'.")
 
