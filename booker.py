@@ -39,11 +39,11 @@ def main():
             "help": "Register a new user. This command is only available for admin users."
         },
         "dereg": {
-            "args": {"username": {"format": "csv", "wildcard": True}},
+            "args": {"username": {"format": "csv"}},
             "help": "Deregister users. This command is only available for admin users.",
         },
         "cpx": {
-            "args": {"username": {"format": "text", "default": currentuser}},
+            "args": {"username": {"format": "text"}},
             "help": "Change the password of a user. Defaults to the current user if no username is provided. This command is only available for admin users."
         },
         "users": {
@@ -54,7 +54,7 @@ def main():
             "help": "Create new rooms with specified IDs. This command is only available for admin users.",
         },
         "destroy": {
-            "args": {"roomIDs": {"format": "csv", "wildcard": True}},
+            "args": {"roomIDs": {"format": "csv"}},
             "help": "Delete rooms with specified IDs. This command is only available for admin users.",
         },
         "sql": {
@@ -78,7 +78,7 @@ def main():
             "help": "List bookings of the specified rooms booked by specified users within a given time.",
         },
         "show": {
-            "args": {"bookingIDs": {"format": "csv", "wildcard": True}},
+            "args": {"bookingIDs": {"format": "csv", "wildcard": True, "default": "*"}},
             "help": "Show bookings of specified booking IDs.",
         },
         "book": {
@@ -90,7 +90,7 @@ def main():
             "help": "Make a reservation for specified rooms at a given time.",
         },
         "cancel": {
-            "args": {"bookingIDs": {"format": "csv", "wildcard": True}},
+            "args": {"bookingIDs": {"format": "csv"}},
             "help": "Cancel bookings by booking IDs. Standard users can only cancel their own bookings.",
         },
         "clear": {
@@ -187,16 +187,16 @@ def main():
         if len(args)-1 < (len(commands[args[0]]['args']) if 'args' in commands[args[0]] else 0):
             defaults_available = True
             for _ in range(len(args)-1, len(commands[args[0]]['args'])):
-                if 'default' not in commands[args[0]]['args'].items()[_]:
+                if 'default' not in list(commands[args[0]]['args'].values())[_]:
                     defaults_available = False
                     break
             if defaults_available:
                 for i in range(len(args)-1, len(commands[args[0]]['args'])):
-                    args.append(commands[args[0]]['args'].items()[i]["default"])
+                    args.append(list(commands[args[0]]['args'].values())[i]["default"])
                 displayinfo(f"Default values filled. Actually running: {args[0]} {' '.join(args[1:])}")
                 print()  # Print a new line for better readability
             else:
-                displayerror(f"Command '{args[0]}' requires {len(commands[args[0]]['args']) if 'args' in commands[args[0]] else 0} argument(s). Got {len(args)-1}.")
+                displayerror(f"Command '{args[0]}' uses {len(commands[args[0]]['args']) if 'args' in commands[args[0]] else 0} argument(s). Got {len(args)-1}. Default values are not provided for missing arguments.")
                 print()  # Print a new line for better readability
                 continue
         elif len(args)-1 > (len(commands[args[0]]['args']) if 'args' in commands[args[0]] else 0):
@@ -332,12 +332,15 @@ def main():
                 bookings = []
 
                 cursor = sqlite3.connect(databasepath).cursor()
-                for booking_id in booking_ids:
-                    booking = cursor.execute("SELECT * FROM bookings WHERE id=?", [booking_id]).fetchone()
-                    if booking is None:
-                        displaywarning(f"Booking ID '{booking_id}' does not exist and is skipped.")
-                        continue
-                    bookings.append(booking)
+                if booking_ids[0] == '*':
+                    bookings = cursor.execute("SELECT * FROM bookings").fetchall()
+                else:
+                    for booking_id in booking_ids:
+                        booking = cursor.execute("SELECT * FROM bookings WHERE id=?", [booking_id]).fetchone()
+                        if booking is None:
+                            displaywarning(f"Booking ID '{booking_id}' does not exist and is skipped.")
+                            continue
+                        bookings.append(booking)
                 cursor.connection.commit()
                 cursor.connection.close()
 
@@ -423,42 +426,49 @@ def main():
                 user_ids = args[2].split(',')
                 start = args[3]
                 end = args[4]
-                actual_booking_ids = []
 
-                cursor = sqlite3.connect(databasepath).cursor()
+                if "*" not in (room_ids, user_ids, start, end) or input("You are using wildcard '*' in one or more arguments. This will cancel bookings massively. Are you sure you want to proceed? Enter 'yes' to confirm: ").lower() == "yes":
 
-                params = []
-                if room_ids[0] != '*':
-                    room_ids = [room for room in room_ids if cursor.execute("SELECT id FROM rooms WHERE id=?", [room]).fetchone() is not None or displaywarning(f"Room '{room}' does not exist and is skipped.")]
-                    params.extend(room_ids)
-                if user_ids[0] != '*':
-                    user_ids = [user for user in user_ids if cursor.execute("SELECT username FROM users WHERE username=?", [user]).fetchone() is not None or displaywarning(f"User '{user}' does not exist and is skipped.")]
-                    params.extend(user_ids)
-                if start != '*':
-                    params.append(start)
-                if end != '*':
-                    params.append(end)
+                    actual_booking_ids = []
 
-                query = f"SELECT id, username FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"} AND {"substr(timediff(?, end),1,1) = '-'" if start != '*' else "TRUE"} AND {"substr(timediff(start, ?),1,1) = '-'" if end != '*' else "TRUE"}"
+                    cursor = sqlite3.connect(databasepath).cursor()
 
-                bookings = cursor.execute(query, params).fetchall()
+                    params = []
+                    if room_ids[0] != '*':
+                        room_ids = [room for room in room_ids if cursor.execute("SELECT id FROM rooms WHERE id=?", [room]).fetchone() is not None or displaywarning(f"Room '{room}' does not exist and is skipped.")]
+                        params.extend(room_ids)
+                    if user_ids[0] != '*':
+                        user_ids = [user for user in user_ids if cursor.execute("SELECT username FROM users WHERE username=?", [user]).fetchone() is not None or displaywarning(f"User '{user}' does not exist and is skipped.")]
+                        params.extend(user_ids)
+                    if start != '*':
+                        params.append(start)
+                    if end != '*':
+                        params.append(end)
 
-                if bookings:
-                    for booking in bookings:
-                        if booking[1] != currentuser and not isadmin:
-                            displaywarning(f"You can only clear your own bookings as a standard user. Booking ID '{booking[0]}' is skipped.")
-                            continue
-                        actual_booking_ids.append(booking[0])
-                        cursor.execute("DELETE FROM bookings WHERE id=?", [booking[0]])
+                    query = f"SELECT id, username FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"} AND {"substr(timediff(?, end),1,1) = '-'" if start != '*' else "TRUE"} AND {"substr(timediff(start, ?),1,1) = '-'" if end != '*' else "TRUE"}"
 
-                if actual_booking_ids:
-                    displaysuccess(f"The following bookings are cleared successfully:")
-                    print("\t".join(actual_booking_ids))
+                    bookings = cursor.execute(query, params).fetchall()
+
+                    if bookings:
+                        for booking in bookings:
+                            if booking[1] != currentuser and not isadmin:
+                                displaywarning(f"You can only clear your own bookings as a standard user. Booking ID '{booking[0]}' is skipped.")
+                                continue
+                            actual_booking_ids.append(booking[0])
+                            cursor.execute("DELETE FROM bookings WHERE id=?", [booking[0]])
+
+                    if actual_booking_ids:
+                        displaysuccess(f"The following bookings are cleared successfully:")
+                        print("\t".join(actual_booking_ids))
+                    else:
+                        displayerror("No bookings were cleared.")
+
+                    cursor.connection.commit()
+                    cursor.connection.close()
+                    
                 else:
-                    displayerror("No bookings were cleared.")
 
-                cursor.connection.commit()
-                cursor.connection.close()
+                    displayerror("Clearing bookings cancelled.")
                 
             elif isadmin:
 
