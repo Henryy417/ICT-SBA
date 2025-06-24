@@ -1,3 +1,8 @@
+# TODOS
+# - Add 'now' as a valid time input
+# - Add more comments
+# - Show help page and error msg for commands according to user type and login status
+
 def displayerror(msg): # Error Message: User must solve this to receive expected results
     print(f"\33[31m{msg}\33[0m")
 
@@ -72,7 +77,7 @@ def main():
             "args": {
                 "roomIDs": {"format": "csv", "wildcard": True, "default": "*"},
                 "usernames": {"format": "csv", "wildcard": True, "default": "*"},
-                "start": {"format": "time", "wildcard": True, "default": "*"},
+                "start": {"format": "time", "wildcard": True, "default": "now"},
                 "end": {"format": "time", "wildcard": True, "default": "*"}
             },
             "help": "List bookings of the specified rooms booked by specified users within a given time.",
@@ -206,11 +211,13 @@ def main():
         # Handle commands
         if args[0] == "help":
 
-            print("Use 'man' to receive more information about a specific command.\n")
-            print("Command abbreviations are allowed. Enter the first few letters of a command. Note that the parser tries to see the input as a complete command before seeking a possible abbreviation.\n")
-            print("Default values of arguments, if exist, will be filled when not enough arguments are provided.\n")
-            print("\33[3mcsv\33[0m values, commonly seen if more than one value is allowed in an argument (e.g. IDs), are separated by commas without spaces. e.g. 'room1,room2,room3'.\n")
-            print("\33[3mtime\33[0m values must be in the format 'YYYY-MM-DD HH:MM'. e.g. '2008-04-17 12:00'.\n")
+            print("Use 'man' to receive more information about a specific command.")
+            print("Command abbreviations are allowed. Enter the first few letters of a command. Note that the parser tries to see the input as a complete command before seeking a possible abbreviation.")
+            print("After entering a command, add a space then the arguments if arguments are required.\n")
+            print("Arguments are separated by spaces. If an argument contains spaces, it must be quoted with single or double quotes.")
+            print("Default values of arguments, if exist, will be filled when not enough arguments are provided.")
+            print("Arguments of \33[3mcsv\33[0m values, commonly seen if more than one value is allowed in an argument (e.g. IDs), are separated by commas without spaces. e.g. 'room1,room2,room3'.")
+            print("Arguments of \33[3mtime\33[0m values must be in the format 'YYYY-MM-DD HH:MM'. e.g. '2008-04-17 12:00'. Additionally, 'now' can be used to refer to current time.")
             print("Wildcard '*' usually means \33[3mall\33[0m. For some time input, it can be used to remove respective time constraints according to context. e.g. Using '*' as start time and '2008-04-17' as end time means every record until '2008-04-17'.\n")
             print("Command".ljust(25)+"Description")
             print("---".ljust(25)+"---")
