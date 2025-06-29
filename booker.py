@@ -1,8 +1,3 @@
-# TODOS
-# - Add 'now' as a valid time input
-# - Add more comments
-# - Show help page and error msg for commands according to user type and login status
-
 def displayerror(msg): # Error Message: User must solve this to receive expected results
     print(f"\33[31m{msg}\33[0m")
 
@@ -23,7 +18,7 @@ def main():
     import sqlite3
     import os
 
-    info = "Booker v1.1"
+    info = "Booker v1.0"
     copyright = "Copyright (c) 2025 Chen Hang Tsz Henry"
     databasepath = os.path.realpath(os.path.dirname(__file__))+"/data.db"
 
@@ -41,37 +36,46 @@ def main():
         # Commands usable as admins
         "reg": {
             "args": {"username": {"format": "text"}},
-            "help": "Register a new user. This command is only available for admin users."
+            "help": "Register a new user.",
+            "use_requirement": "admin"
         },
         "dereg": {
             "args": {"username": {"format": "csv"}},
-            "help": "Deregister users. This command is only available for admin users.",
+            "help": "Deregister users.",
+            "use_requirement": "admin"
         },
         "cpx": {
             "args": {"username": {"format": "text"}},
-            "help": "Change the password of a user. Defaults to the current user if no username is provided. This command is only available for admin users."
+            "help": "Change the password of a user. Defaults to the current user if no username is provided.",
+            "use_requirement": "admin"
         },
         "users": {
-            "help": "List all users. This command is only available for admin users.",
+            "help": "List all users.",
+            "use_requirement": "admin"
         },
         "build": {
             "args": {"roomIDs": {"format": "csv"}},
-            "help": "Create new rooms with specified IDs. This command is only available for admin users.",
+            "help": "Create new rooms with specified IDs.",
+            "use_requirement": "admin"
         },
         "destroy": {
             "args": {"roomIDs": {"format": "csv"}},
-            "help": "Delete rooms with specified IDs. This command is only available for admin users.",
+            "help": "Delete rooms with specified IDs.",
+            "use_requirement": "admin"
         },
         "sql": {
             "args": {"query": {"format": "text"}},
             "help": "Execute a raw SQL query. The SQL query must be quoted. Be careful with this command as it can modify the database.",
+            "use_requirement": "admin"
         },
         # Commands usable as standard users
         "cp": {
-            "help": "Change the password of the current user."
+            "help": "Change the password of the current user.",
+            "use_requirement": "user"
         },
         "rooms": {
             "help": "List all rooms.",
+            "use_requirement": "user"
         },
         "search": {
             "args": {
@@ -81,10 +85,12 @@ def main():
                 "end": {"format": "time", "wildcard": True, "default": "*"}
             },
             "help": "List bookings of the specified rooms booked by specified users within a given time.",
+            "use_requirement": "user"
         },
         "show": {
             "args": {"bookingIDs": {"format": "csv", "wildcard": True, "default": "*"}},
             "help": "Show bookings of specified booking IDs.",
+            "use_requirement": "user"
         },
         "book": {
             "args": {
@@ -93,10 +99,12 @@ def main():
                 "end": {"format": "time"}
             },
             "help": "Make a reservation for specified rooms at a given time.",
+            "use_requirement": "user"
         },
         "cancel": {
             "args": {"bookingIDs": {"format": "csv"}},
             "help": "Cancel bookings by booking IDs. Standard users can only cancel their own bookings.",
+            "use_requirement": "user"
         },
         "clear": {
             "args": {
@@ -105,7 +113,8 @@ def main():
                 "start": {"format": "time", "wildcard": True},
                 "end": {"format": "time", "wildcard": True}
             },
-            "help": "Cancel bookings to make available the specified rooms booked by specified users within a given time. Standard users can only clear their own bookings."
+            "help": "Cancel bookings to make available the specified rooms booked by specified users within a given time. Standard users can only clear their own bookings.",
+            "use_requirement": "user"
         }
     }
 
@@ -216,17 +225,28 @@ def main():
             print("After entering a command, add a space then the arguments if arguments are required.\n")
             print("Arguments are separated by spaces. If an argument contains spaces, it must be quoted with single or double quotes.")
             print("Default values of arguments, if exist, will be filled when not enough arguments are provided.")
-            print("Arguments of \33[3mcsv\33[0m values, commonly seen if more than one value is allowed in an argument (e.g. IDs), are separated by commas without spaces. e.g. 'room1,room2,room3'.")
-            print("Arguments of \33[3mtime\33[0m values must be in the format 'YYYY-MM-DD HH:MM'. e.g. '2008-04-17 12:00'. Additionally, 'now' can be used to refer to current time.")
-            print("Wildcard '*' usually means \33[3mall\33[0m. For some time input, it can be used to remove respective time constraints according to context. e.g. Using '*' as start time and '2008-04-17' as end time means every record until '2008-04-17'.\n")
-            print("Command".ljust(25)+"Description")
-            print("---".ljust(25)+"---")
+
+            print()
+
+            if currentuser is not None:
+                print("Arguments of \33[3mcsv\33[0m values, commonly seen if more than one value is allowed in an argument (e.g. IDs), are separated by commas without spaces. e.g. 'room1,room2,room3'.")
+                print("Arguments of \33[3mtime\33[0m values must be in the format 'YYYY-MM-DD HH:MM'. e.g. '2008-04-17 12:00'. Additionally, 'now' can be used to refer to current time sometimes if it is meaningful in the context.")
+                print("Wildcard '*' usually means \33[3mall\33[0m. For some time input, it can be used to remove respective time constraints according to context. e.g. Using '*' as start time and '2008-04-17' as end time means every record until '2008-04-17'.")
+            else:
+                print("More commands are available after login.")
+
+            print()
+
+            print("Command".ljust(25)+"Description".ljust(25))
+            print("---".ljust(25)+"---".ljust(25))
+
             for cmd, details in commands.items():
-                print(cmd.ljust(25)+details['help'])
+                if not ('use_requirement' in details and (details['use_requirement'] == "admin" and not isadmin or details['use_requirement'] == "user" and currentuser is None)):
+                    print(cmd.ljust(25)+details['help'].ljust(25))
 
         elif args[0] == "man":
 
-            if args[1] in commands:
+            if args[1] in commands and not ('use_requirement' in commands[args[1]] and (commands[args[1]]['use_requirement'] == "admin" and not isadmin or commands[args[1]]['use_requirement'] == "user" and currentuser is None)):
                 print("Usage:")
                 syntax_text = args[1]+" "
                 if 'args' in commands[args[1]]:
@@ -314,24 +334,37 @@ def main():
                     user_ids = [user for user in user_ids if cursor.execute("SELECT username FROM users WHERE username=?", [user]).fetchone() is not None or displaywarning(f"User '{user}' does not exist and is skipped.")]
                     params.extend(user_ids)
                 if start != '*':
+                    if start == 'now':
+                        start = datetime.now().strftime('%Y-%m-%d %H:%M')
+                        displayinfo(f"Using current time {start} as start time.")
                     params.append(start)
                 if end != '*':
+                    if end == 'now':
+                        end = datetime.now().strftime('%Y-%m-%d %H:%M')
+                        displayinfo(f"Using current time {end} as end time.")
                     params.append(end)
-
-                query = f"SELECT * FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"} AND {"substr(timediff(?, end),1,1) = '-'" if start != '*' else "TRUE"} AND {"substr(timediff(start, ?),1,1) = '-'" if end != '*' else "TRUE"}"
                 
-                bookings = cursor.execute(query, params).fetchall()
-                cursor.connection.commit()
-                cursor.connection.close()
+                if cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL AND strftime('%F %R', ?) IS NOT NULL", (start, end)).fetchone()[0] == 1:
+                    if cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (end, start)).fetchone()[0] == "+":
 
-                if bookings:
-                    displaysuccess("Bookings found:")
-                    print("Booking ID".ljust(25)+"Room ID".ljust(25)+"User".ljust(25)+"Start Time".ljust(25)+"End Time".ljust(25))
-                    print("---".ljust(25)+"---".ljust(25)+"---".ljust(25)+"---".ljust(25)+"---".ljust(25))
-                    for booking in bookings:
-                        print(str(booking[0]).ljust(25)+booking[1].ljust(25)+booking[2].ljust(25)+booking[3].ljust(25)+booking[4].ljust(25))
+                        query = f"SELECT * FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"} AND {"substr(timediff(?, end),1,1) = '-'" if start != '*' else "TRUE"} AND {"substr(timediff(start, ?),1,1) = '-'" if end != '*' else "TRUE"}"
+                
+                        bookings = cursor.execute(query, params).fetchall()
+                        cursor.connection.commit()
+                        cursor.connection.close()
+
+                        if bookings:
+                            displaysuccess("Bookings found:")
+                            print("Booking ID".ljust(25)+"Room ID".ljust(25)+"User".ljust(25)+"Start Time".ljust(25)+"End Time".ljust(25))
+                            print("---".ljust(25)+"---".ljust(25)+"---".ljust(25)+"---".ljust(25)+"---".ljust(25))
+                            for booking in bookings:
+                                print(str(booking[0]).ljust(25)+booking[1].ljust(25)+booking[2].ljust(25)+booking[3].ljust(25)+booking[4].ljust(25))
+                        else:
+                            displaysuccess("No bookings found. The time slot is free.")
+                    else:
+                        displayerror("Time input is invalid. The end time must be after the start time.")
                 else:
-                    displaysuccess("No bookings found. The time slot is free.")
+                    displayerror("Invalid time format. Please use 'YYYY-MM-DD HH:MM' or 'now'.")
 
             elif args[0] == "show":
 
@@ -393,7 +426,7 @@ def main():
                         else:
                             displayerror("No bookings were created. Please check the time slot and room IDs.")
                     else:
-                        displayerror("Time slot is invalid. The end time must be after the start time.")
+                        displayerror("Time input is invalid. The end time must be after the start time.")
                 else:
                     displayerror("Invalid time format. Please use 'YYYY-MM-DD HH:MM'.")
 
@@ -448,33 +481,44 @@ def main():
                         user_ids = [user for user in user_ids if cursor.execute("SELECT username FROM users WHERE username=?", [user]).fetchone() is not None or displaywarning(f"User '{user}' does not exist and is skipped.")]
                         params.extend(user_ids)
                     if start != '*':
+                        if start == 'now':
+                            start = datetime.now().strftime('%Y-%m-%d %H:%M')
+                            displayinfo(f"Using current time {start} as start time.")
                         params.append(start)
                     if end != '*':
+                        if end == 'now':
+                            end = datetime.now().strftime('%Y-%m-%d %H:%M')
+                            displayinfo(f"Using current time {end} as end time.")
                         params.append(end)
 
-                    query = f"SELECT id, username FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"} AND {"substr(timediff(?, end),1,1) = '-'" if start != '*' else "TRUE"} AND {"substr(timediff(start, ?),1,1) = '-'" if end != '*' else "TRUE"}"
+                    if cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL AND strftime('%F %R', ?) IS NOT NULL", (start, end)).fetchone()[0] == 1:
+                        if cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (end, start)).fetchone()[0] != "+":
 
-                    bookings = cursor.execute(query, params).fetchall()
+                            query = f"SELECT id, username FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"} AND {"substr(timediff(?, end),1,1) = '-'" if start != '*' else "TRUE"} AND {"substr(timediff(start, ?),1,1) = '-'" if end != '*' else "TRUE"}"
 
-                    if bookings:
-                        for booking in bookings:
-                            if booking[1] != currentuser and not isadmin:
-                                displaywarning(f"You can only clear your own bookings as a standard user. Booking ID '{booking[0]}' is skipped.")
-                                continue
-                            actual_booking_ids.append(booking[0])
-                            cursor.execute("DELETE FROM bookings WHERE id=?", [booking[0]])
+                            bookings = cursor.execute(query, params).fetchall()
 
-                    if actual_booking_ids:
-                        displaysuccess(f"The following bookings are cleared successfully:")
-                        print("\t".join(actual_booking_ids))
+                            if bookings:
+                                for booking in bookings:
+                                    if booking[1] != currentuser and not isadmin:
+                                        displaywarning(f"You can only clear your own bookings as a standard user. Booking ID '{booking[0]}' is skipped.")
+                                        continue
+                                    actual_booking_ids.append(booking[0])
+                                    cursor.execute("DELETE FROM bookings WHERE id=?", [booking[0]])
+
+                            if actual_booking_ids:
+                                displaysuccess(f"The following bookings are cleared successfully:")
+                                print("\t".join(actual_booking_ids))
+                            else:
+                                displayerror("No bookings were cleared.")
+
+                            cursor.connection.commit()
+                            cursor.connection.close()
+                        else:
+                            displayerror("Time input is invalid. The end time must be after the start time.")
                     else:
-                        displayerror("No bookings were cleared.")
-
-                    cursor.connection.commit()
-                    cursor.connection.close()
-                    
+                        displayerror("Invalid time format. Please use 'YYYY-MM-DD HH:MM' or 'now'.")
                 else:
-
                     displayerror("Clearing bookings cancelled.")
                 
             elif isadmin:
