@@ -160,7 +160,7 @@ def main():
     cursor.connection.commit()
     cursor.connection.close()
 
-    print()  # Print a new line for better readability
+    print()
 
     # Main loop for command input
 
@@ -186,15 +186,15 @@ def main():
                         possiblecmds.append(cmd)
             if len(possiblecmds) == 0:
                 displayerror(f"Command or abbreviation '{args[0]}' not found. Type 'help' for a list of commands.")
-                print()  # Print a new line for better readability
+                print()
                 continue
             elif len(possiblecmds) == 1:
                 args[0] = possiblecmds[0]
                 displayinfo(f"Command abbreviation interpreted as '{possiblecmds[0]}'.")
-                print()  # Print a new line for better readability
+                print()
             else:
                 displayerror(f"Command abbreviation '{args[0]}' is ambiguous. Which of the following commands did you mean: {', '.join(possiblecmds)}?")
-                print()  # Print a new line for better readability
+                print()
                 continue
 
         # Check required number of arguments and fill defaults if necessary
@@ -208,10 +208,10 @@ def main():
                 for i in range(len(args)-1, len(commands[args[0]]['args'])):
                     args.append(list(commands[args[0]]['args'].values())[i]["default"])
                 displayinfo(f"Default values filled. Actually running: {args[0]} {' '.join(args[1:])}")
-                print()  # Print a new line for better readability
+                print()
             else:
                 displayerror(f"Command '{args[0]}' uses {len(commands[args[0]]['args']) if 'args' in commands[args[0]] else 0} argument(s). Got {len(args)-1}. Default values are not provided for missing arguments.")
-                print()  # Print a new line for better readability
+                print()
                 continue
         elif len(args)-1 > (len(commands[args[0]]['args']) if 'args' in commands[args[0]] else 0):
             displaywarning(f"Command '{args[0]}' requires only {len(commands[args[0]]['args']) if 'args' in commands[args[0]] else 0} argument(s). Got {len(args)-1}.")
@@ -678,7 +678,7 @@ def main():
         else:
             displayerror(f"You must be logged in to use the command '{args[0]}'. Use 'login' to log in as a user first.")
 
-        print()  # Print a new line for better readability
+        print()
 
 
 
