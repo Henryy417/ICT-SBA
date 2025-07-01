@@ -191,7 +191,6 @@ def main():
             elif len(possiblecmds) == 1:
                 args[0] = possiblecmds[0]
                 displayinfo(f"Command abbreviation interpreted as '{possiblecmds[0]}'.")
-                print()
             else:
                 displayerror(f"Command abbreviation '{args[0]}' is ambiguous. Which of the following commands did you mean: {', '.join(possiblecmds)}?")
                 print()
@@ -208,14 +207,14 @@ def main():
                 for i in range(len(args)-1, len(commands[args[0]]['args'])):
                     args.append(list(commands[args[0]]['args'].values())[i]["default"])
                 displayinfo(f"Default values filled. Actually running: {args[0]} {' '.join(args[1:])}")
-                print()
             else:
                 displayerror(f"Command '{args[0]}' uses {len(commands[args[0]]['args']) if 'args' in commands[args[0]] else 0} argument(s). Got {len(args)-1}. Default values are not provided for missing arguments.")
                 print()
                 continue
         elif len(args)-1 > (len(commands[args[0]]['args']) if 'args' in commands[args[0]] else 0):
             displaywarning(f"Command '{args[0]}' requires only {len(commands[args[0]]['args']) if 'args' in commands[args[0]] else 0} argument(s). Got {len(args)-1}.")
-            print()
+        
+        print()
 
         # Handle commands
         if args[0] == "help":
@@ -230,7 +229,7 @@ def main():
 
             if currentuser is not None:
                 print("Arguments of \33[3mcsv\33[0m values, commonly seen if more than one value is allowed in an argument (e.g. IDs), are separated by commas without spaces. e.g. 'room1,room2,room3'.")
-                print("Arguments of \33[3mtime\33[0m values must be in the format 'YYYY-MM-DD HH:MM'. e.g. '2008-04-17 12:00'. Additionally, 'now' can be used to refer to current time sometimes if it is meaningful in the context.")
+                print("Arguments of \33[3mtime\33[0m values must be in the format 'YYYY-MM-DD HH:MM'. e.g. '2008-04-17 12:00'. Additionally, 'now' can be used to refer to current time.")
                 print("Wildcard '*' usually means \33[3mall\33[0m. For some time input, it can be used to remove respective time constraints according to context. e.g. Using '*' as start time and '2008-04-17' as end time means every record until '2008-04-17'.")
             else:
                 print("More commands are available after login.")
@@ -402,6 +401,13 @@ def main():
 
                 cursor = sqlite3.connect(databasepath).cursor()
 
+                if start == 'now':
+                    start = datetime.now().strftime('%Y-%m-%d %H:%M')
+                    displayinfo(f"Using current time {start} as start time.")
+                if end == 'now':
+                    end = datetime.now().strftime('%Y-%m-%d %H:%M')
+                    displayinfo(f"Using current time {end} as end time.")
+
                 if cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL AND strftime('%F %R', ?) IS NOT NULL", (start, end)).fetchone()[0] == 1:
                     if cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (end, start)).fetchone()[0] == "+":
 
@@ -428,7 +434,7 @@ def main():
                     else:
                         displayerror("Time input is invalid. The end time must be after the start time.")
                 else:
-                    displayerror("Invalid time format. Please use 'YYYY-MM-DD HH:MM'.")
+                    displayerror("Invalid time format. Please use 'YYYY-MM-DD HH:MM' or 'now'.")
 
                 cursor.connection.commit()
                 cursor.connection.close()
