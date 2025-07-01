@@ -13,7 +13,7 @@ def displayinfo(msg): # Information Message: User may want to know this but noth
 
 def main():
     # Import necessary modules
-    from shlex import split
+    from shlex import split, join
     from getpass import getpass
     from hashlib import sha3_512
     from datetime import datetime
@@ -223,7 +223,7 @@ def main():
             if defaults_available:
                 for i in range(len(args)-1, len(available_commands[args[0]]['args'])):
                     args.append(list(available_commands[args[0]]['args'].values())[i]["default"])
-                displayinfo(f"Default values filled. Actually running: {args[0]} {' '.join(args[1:])}")
+                displayinfo(f"Default values filled. Actually running: {join(args)}")
             else:
                 displayerror(f"Command '{args[0]}' uses {len(available_commands[args[0]]['args']) if 'args' in available_commands[args[0]] else 0} argument(s). Got {len(args)-1}. Default values are not provided for missing arguments.")
                 print()
@@ -360,8 +360,8 @@ def main():
                         displayinfo(f"Using current time {end} as end time.")
                     params.append(end)
                 
-                if cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL AND strftime('%F %R', ?) IS NOT NULL", (start, end)).fetchone()[0] == 1:
-                    if cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (end, start)).fetchone()[0] == "+":
+                if (start == '*' or cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL", [start]).fetchone()[0] == 1) and (end == '*' or cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL", [end]).fetchone()[0] == 1):
+                    if start == '*' or end == '*' or cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (end, start)).fetchone()[0] == "+":
 
                         query = f"SELECT * FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"} AND {"substr(timediff(?, end),1,1) = '-'" if start != '*' else "TRUE"} AND {"substr(timediff(start, ?),1,1) = '-'" if end != '*' else "TRUE"}"
                 
@@ -514,8 +514,8 @@ def main():
                             displayinfo(f"Using current time {end} as end time.")
                         params.append(end)
 
-                    if cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL AND strftime('%F %R', ?) IS NOT NULL", (start, end)).fetchone()[0] == 1:
-                        if cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (end, start)).fetchone()[0] != "+":
+                    if (start == '*' or cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL", [start]).fetchone()[0] == 1) and (end == '*' or cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL", [end]).fetchone()[0] == 1):
+                        if start == '*' or end == '*' or cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (end, start)).fetchone()[0] == "+":
 
                             query = f"SELECT id, username FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"} AND {"substr(timediff(?, end),1,1) = '-'" if start != '*' else "TRUE"} AND {"substr(timediff(start, ?),1,1) = '-'" if end != '*' else "TRUE"}"
 
