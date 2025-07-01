@@ -126,12 +126,12 @@ def main():
     }
 
     # List of available commands based on user status
-    available_commands = []
+    available_commands = {}
 
     def update_available_commands():
         for cmd, details in commands.items():
             if not ('use_requirement' in details and (details['use_requirement'] == "admin" and not isadmin or details['use_requirement'] == "user" and currentuser is None)):
-                available_commands.append(cmd)
+                available_commands[cmd] = details
     
     update_available_commands() # Update available commands based on current user status
 
