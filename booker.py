@@ -230,8 +230,6 @@ def main():
                 continue
         elif len(args)-1 > (len(available_commands[args[0]]['args']) if 'args' in available_commands[args[0]] else 0):
             displaywarning(f"Command '{args[0]}' requires only {len(available_commands[args[0]]['args']) if 'args' in available_commands[args[0]] else 0} argument(s). Got {len(args)-1}.")
-        
-        print()
 
         # Handle commands
         if args[0] == "help":
@@ -361,7 +359,7 @@ def main():
                     params.append(end)
                 
                 if (start == '*' or cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL", [start]).fetchone()[0] == 1) and (end == '*' or cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL", [end]).fetchone()[0] == 1):
-                    if start == '*' or end == '*' or cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (end, start)).fetchone()[0] == "+":
+                    if start == '*' or end == '*' or cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (start, end)).fetchone()[0] == "-":
 
                         query = f"SELECT * FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"} AND {"substr(timediff(?, end),1,1) = '-'" if start != '*' else "TRUE"} AND {"substr(timediff(start, ?),1,1) = '-'" if end != '*' else "TRUE"}"
                 
@@ -426,7 +424,7 @@ def main():
                     displayinfo(f"Using current time {end} as end time.")
 
                 if cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL AND strftime('%F %R', ?) IS NOT NULL", (start, end)).fetchone()[0] == 1:
-                    if cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (end, start)).fetchone()[0] == "+":
+                    if cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (start, end)).fetchone()[0] == "-":
 
                         for room_id in room_ids:
                             if cursor.execute("SELECT id FROM rooms WHERE id=?", [room_id]).fetchone() is None:
@@ -515,7 +513,7 @@ def main():
                         params.append(end)
 
                     if (start == '*' or cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL", [start]).fetchone()[0] == 1) and (end == '*' or cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL", [end]).fetchone()[0] == 1):
-                        if start == '*' or end == '*' or cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (end, start)).fetchone()[0] == "+":
+                        if start == '*' or end == '*' or cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (start, end)).fetchone()[0] == "-":
 
                             query = f"SELECT id, username FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"} AND {"substr(timediff(?, end),1,1) = '-'" if start != '*' else "TRUE"} AND {"substr(timediff(start, ?),1,1) = '-'" if end != '*' else "TRUE"}"
 
@@ -526,7 +524,7 @@ def main():
                                     if booking[1] != currentuser and not isadmin:
                                         displaywarning(f"You can only clear your own bookings as a standard user. Booking ID '{booking[0]}' is skipped.")
                                         continue
-                                    actual_booking_ids.append(booking[0])
+                                    actual_booking_ids.append(str(booking[0]))
                                     cursor.execute("DELETE FROM bookings WHERE id=?", [booking[0]])
 
                             if actual_booking_ids:
