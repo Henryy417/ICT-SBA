@@ -1,3 +1,4 @@
+# Global program functions
 def displayerror(msg): # Error Message: User must solve this to receive expected results
     print(f"\33[31m{msg}\33[0m")
 
@@ -11,6 +12,7 @@ def displayinfo(msg): # Information Message: User may want to know this but noth
     print(f"\33[34m{msg}\33[0m")
 
 def main():
+    # Import necessary modules
     from shlex import split
     from getpass import getpass
     from hashlib import sha3_512
@@ -18,13 +20,18 @@ def main():
     import sqlite3
     import os
 
+    # Program information
     info = "Booker v1.0"
     copyright = "Copyright (c) 2025 Chen Hang Tsz Henry"
+
+    # Customizable program information
     databasepath = os.path.realpath(os.path.dirname(__file__))+"/data.db"
 
+    # Placeholder for user authentication
     currentuser = None  # Placeholder for current user
     isadmin = False  # Placeholder for admin status
 
+    # Command definitions
     commands = {
         # Commands usable before login
         "help": {"help": "Show help message."},
@@ -118,10 +125,22 @@ def main():
         }
     }
 
+    # List of available commands based on user status
+    available_commands = []
+
+    def update_available_commands():
+        for cmd, details in commands.items():
+            if not ('use_requirement' in details and (details['use_requirement'] == "admin" and not isadmin or details['use_requirement'] == "user" and currentuser is None)):
+                available_commands.append(cmd)
+    
+    update_available_commands() # Update available commands based on current user status
+
+    # Print program information
     print(info)
     print(copyright)
     displayinfo("Type 'help' for a list of commands.")
 
+    # Initialize database and create necessary tables if they do not exist
     cursor = sqlite3.connect(databasepath).cursor()
 
     if cursor.execute("SELECT type FROM sqlite_master WHERE type='table' AND name='users'").fetchone() is None:
@@ -163,14 +182,12 @@ def main():
     print()
 
     # Main loop for command input
-
     while True:
         # Split input into arguments
         try:
             args = split(input((('\33[31m'+currentuser+'\33[0m' if isadmin else currentuser) if currentuser is not None else "") + "> "))
         except ValueError:
-            displayerror("Invalid input. Looks like you forget a closing quote somewhere, or escape characters are not used properly.")
-            displayerror("Quotes and backslashes, when used literally, should be escaped with a backslash (\\).")
+            displayerror("Invalid input. Looks like you forget a closing quote somewhere, or escape characters are not used properly.\nQuotes and backslashes, when used literally, should be escaped with a backslash (\\).")
             print()
             continue
         
@@ -179,9 +196,9 @@ def main():
             continue
 
         # Check if command exists
-        if args[0] not in commands:
+        if args[0] not in available_commands:
             possiblecmds = []
-            for cmd in commands:
+            for cmd in available_commands:
                 if cmd.startswith(args[0]):
                         possiblecmds.append(cmd)
             if len(possiblecmds) == 0:
@@ -197,22 +214,22 @@ def main():
                 continue
 
         # Check required number of arguments and fill defaults if necessary
-        if len(args)-1 < (len(commands[args[0]]['args']) if 'args' in commands[args[0]] else 0):
+        if len(args)-1 < (len(available_commands[args[0]]['args']) if 'args' in available_commands[args[0]] else 0):
             defaults_available = True
-            for _ in range(len(args)-1, len(commands[args[0]]['args'])):
-                if 'default' not in list(commands[args[0]]['args'].values())[_]:
+            for _ in range(len(args)-1, len(available_commands[args[0]]['args'])):
+                if 'default' not in list(available_commands[args[0]]['args'].values())[_]:
                     defaults_available = False
                     break
             if defaults_available:
-                for i in range(len(args)-1, len(commands[args[0]]['args'])):
-                    args.append(list(commands[args[0]]['args'].values())[i]["default"])
+                for i in range(len(args)-1, len(available_commands[args[0]]['args'])):
+                    args.append(list(available_commands[args[0]]['args'].values())[i]["default"])
                 displayinfo(f"Default values filled. Actually running: {args[0]} {' '.join(args[1:])}")
             else:
-                displayerror(f"Command '{args[0]}' uses {len(commands[args[0]]['args']) if 'args' in commands[args[0]] else 0} argument(s). Got {len(args)-1}. Default values are not provided for missing arguments.")
+                displayerror(f"Command '{args[0]}' uses {len(available_commands[args[0]]['args']) if 'args' in available_commands[args[0]] else 0} argument(s). Got {len(args)-1}. Default values are not provided for missing arguments.")
                 print()
                 continue
-        elif len(args)-1 > (len(commands[args[0]]['args']) if 'args' in commands[args[0]] else 0):
-            displaywarning(f"Command '{args[0]}' requires only {len(commands[args[0]]['args']) if 'args' in commands[args[0]] else 0} argument(s). Got {len(args)-1}.")
+        elif len(args)-1 > (len(available_commands[args[0]]['args']) if 'args' in available_commands[args[0]] else 0):
+            displaywarning(f"Command '{args[0]}' requires only {len(available_commands[args[0]]['args']) if 'args' in available_commands[args[0]] else 0} argument(s). Got {len(args)-1}.")
         
         print()
 
@@ -239,21 +256,20 @@ def main():
             print("Command".ljust(25)+"Description".ljust(25))
             print("---".ljust(25)+"---".ljust(25))
 
-            for cmd, details in commands.items():
-                if not ('use_requirement' in details and (details['use_requirement'] == "admin" and not isadmin or details['use_requirement'] == "user" and currentuser is None)):
+            for cmd, details in available_commands.items():
                     print(cmd.ljust(25)+details['help'].ljust(25))
 
         elif args[0] == "man":
 
-            if args[1] in commands and not ('use_requirement' in commands[args[1]] and (commands[args[1]]['use_requirement'] == "admin" and not isadmin or commands[args[1]]['use_requirement'] == "user" and currentuser is None)):
+            if args[1] in available_commands:
                 print("Usage:")
                 syntax_text = args[1]+" "
-                if 'args' in commands[args[1]]:
-                    for arg, prop in commands[args[1]]["args"].items():
+                if 'args' in available_commands[args[1]]:
+                    for arg, prop in available_commands[args[1]]["args"].items():
                         syntax_text += f"[{prop['format']}{"|*" if 'wildcard' in prop else ''}: {arg}{"="+str(prop.get('default')) if 'default' in prop else ''}] "
                 print(syntax_text.strip())
                 print("\nDescription:")
-                print(commands[args[1]]['help'])
+                print(available_commands[args[1]]['help'])
 
             else:
                 displayerror(f"No manual entry for command '{args[1]}'.")
@@ -283,6 +299,7 @@ def main():
             if result is not None:
                 currentuser = args[1]
                 isadmin = result[0] == 1
+                update_available_commands()
                 displaysuccess(f"Logged in as '{currentuser}'.")
             else:
                 displayerror("Invalid username or password.")
@@ -692,9 +709,11 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except KeyboardInterrupt:
-        displayinfo("Program terminated by user.")
+    except SystemExit:
         exit(0)
+    except KeyboardInterrupt:
+        displayerror("Program terminated due to user keyboard interrupt (Ctrl+C).")
+        exit(1)
     except:
         from os import path
         from datetime import datetime
