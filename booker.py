@@ -138,7 +138,7 @@ def main():
     # Print program information
     print(info)
     print(copyright)
-    displayinfo("Type 'help' for a list of commands.")
+    print("Type 'help' for a list of commands.")
 
     # Initialize database and create necessary tables if they do not exist
     cursor = sqlite3.connect(databasepath).cursor()
