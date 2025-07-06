@@ -231,6 +231,8 @@ def main():
         elif len(args)-1 > (len(available_commands[args[0]]['args']) if 'args' in available_commands[args[0]] else 0):
             displaywarning(f"Command '{args[0]}' requires only {len(available_commands[args[0]]['args']) if 'args' in available_commands[args[0]] else 0} argument(s). Got {len(args)-1}.")
 
+        print()
+
         # Handle commands
         if args[0] == "help":
 
