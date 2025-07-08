@@ -169,7 +169,7 @@ def main():
 
        # Create rooms table if it does not exist
        cursor.execute(
-           "CREATE TABLE rooms (id TEXT PRIMARY KEY, description TEXT NOT NULL DEFAULT '')"
+           "CREATE TABLE rooms (id TEXT PRIMARY KEY)"
        )
 
        displayinfo("Initialization: Created 'rooms' table.")
@@ -195,6 +195,10 @@ def main():
 
     # Main loop for command input
     while True:
+
+        parser_notice = False
+        command_notice = False
+
         # Split input into arguments
         try:
             args = split(input((('\33[31m'+currentuser+'\33[0m' if isadmin else currentuser) if currentuser is not None else "") + "> "))
@@ -220,6 +224,7 @@ def main():
             elif len(possiblecmds) == 1:
                 args[0] = possiblecmds[0]
                 displayinfo(f"Command abbreviation interpreted as '{possiblecmds[0]}'.")
+                parser_notice = True
             else:
                 displayerror(f"Command abbreviation '{args[0]}' is ambiguous. Which of the following commands did you mean: {', '.join(possiblecmds)}?")
                 print()
@@ -236,14 +241,16 @@ def main():
                 for i in range(len(args)-1, len(available_commands[args[0]]['args'])):
                     args.append(list(available_commands[args[0]]['args'].values())[i]["default"])
                 displayinfo(f"Default values filled. Actually running: {join(args)}")
+                parser_notice = True
             else:
                 displayerror(f"Command '{args[0]}' uses {len(available_commands[args[0]]['args']) if 'args' in available_commands[args[0]] else 0} argument(s). Got {len(args)-1}. Default values are not provided for missing arguments.")
                 print()
                 continue
         elif len(args)-1 > (len(available_commands[args[0]]['args']) if 'args' in available_commands[args[0]] else 0):
             displaywarning(f"Command '{args[0]}' requires only {len(available_commands[args[0]]['args']) if 'args' in available_commands[args[0]] else 0} argument(s). Got {len(args)-1}.")
+            parser_notice = True
 
-        print()
+        print() if parser_notice else None
 
         # Handle commands
         if args[0] == "help":
@@ -265,11 +272,11 @@ def main():
 
             print()
 
-            print("Command".ljust(25)+"Description".ljust(25))
-            print("---".ljust(25)+"---".ljust(25))
+            print("Command".ljust(10)+"Description".ljust(25))
+            print("---".ljust(10)+"---".ljust(25))
 
             for cmd, details in available_commands.items():
-                    print(cmd.ljust(25)+details['help'].ljust(25))
+                    print(cmd.ljust(10)+details['help'].ljust(25))
 
         elif args[0] == "man":
 
@@ -340,10 +347,10 @@ def main():
 
                 if rooms:
                     displaysuccess("Rooms found:")
-                    print("ID".ljust(25)+"Description".ljust(25))
-                    print("---".ljust(25)+"---".ljust(25))
+                    print("ID".ljust(10))
+                    print("---".ljust(10))
                     for room in rooms:
-                        print(str(room[0]).ljust(25)+room[1].ljust(25))
+                        print(str(room[0]).ljust(10))
                 else:
                     displaywarning("No rooms found. Please create rooms using the 'build' command.")
 
@@ -359,21 +366,23 @@ def main():
 
                 params = []
                 if room_ids[0] != '*':
-                    room_ids = [room for room in room_ids if cursor.execute("SELECT id FROM rooms WHERE id=?", [room]).fetchone() is not None or displaywarning(f"Room '{room}' does not exist and is skipped.")]
+                    room_ids = [room for room in room_ids if cursor.execute("SELECT id FROM rooms WHERE id=?", [room]).fetchone() is not None or displaywarning(f"Room '{room}' does not exist and is skipped.") and (command_notice := True)]
                     params.extend(room_ids)
                 if user_ids[0] != '*':
-                    user_ids = [user for user in user_ids if cursor.execute("SELECT username FROM users WHERE username=?", [user]).fetchone() is not None or displaywarning(f"User '{user}' does not exist and is skipped.")]
+                    user_ids = [user for user in user_ids if cursor.execute("SELECT username FROM users WHERE username=?", [user]).fetchone() is not None or displaywarning(f"User '{user}' does not exist and is skipped.") and (command_notice := True)]
                     params.extend(user_ids)
                 now = datetime.now().strftime('%Y-%m-%d %H:%M')
                 if start != '*':
                     if start == 'now':
                         start = now
                         displayinfo(f"Using current time {start} as start time.")
+                        command_notice = True
                     params.append(start)
                 if end != '*':
                     if end == 'now':
                         end = now
                         displayinfo(f"Using current time {end} as end time.")
+                        command_notice = True
                     params.append(end)
                 params.append(usage)
 
@@ -387,12 +396,14 @@ def main():
                 
                             bookings = cursor.execute(query, params).fetchall()
 
+                            print() if command_notice else None
+
                             if bookings:
                                 displaysuccess("Bookings found:")
-                                print("Booking ID".ljust(25)+"Room ID".ljust(25)+"User".ljust(25)+"Start Time".ljust(25)+"End Time".ljust(25)+"Usage".ljust(25))
-                                print("---".ljust(25)+"---".ljust(25)+"---".ljust(25)+"---".ljust(25)+"---".ljust(25)+"---".ljust(25))
+                                print("Booking ID".ljust(15)+"Room ID".ljust(10)+"User".ljust(25)+"Start Time".ljust(25)+"End Time".ljust(25)+"Usage".ljust(30))
+                                print("---".ljust(15)+"---".ljust(10)+"---".ljust(25)+"---".ljust(25)+"---".ljust(25)+"---".ljust(30))
                                 for booking in bookings:
-                                    print(str(booking[0]).ljust(25)+booking[1].ljust(25)+booking[2].ljust(25)+booking[3].ljust(25)+booking[4].ljust(25)+booking[5].ljust(25))
+                                    print(str(booking[0]).ljust(15)+booking[1].ljust(10)+booking[2].ljust(25)+booking[3].ljust(25)+booking[4].ljust(25)+booking[5].ljust(30))
                             else:
                                 displaysuccess("No bookings found. The time slot is free.")
 
@@ -419,17 +430,20 @@ def main():
                         booking = cursor.execute("SELECT * FROM bookings WHERE id=?", [booking_id]).fetchone()
                         if booking is None:
                             displaywarning(f"Booking ID '{booking_id}' does not exist and is skipped.")
+                            command_notice = True
                             continue
                         bookings.append(booking)
                 cursor.connection.commit()
                 cursor.connection.close()
 
+                print() if command_notice else None
+
                 if bookings:
                     displaysuccess("Bookings found:")
-                    print("Booking ID".ljust(25)+"Room ID".ljust(25)+"User".ljust(25)+"Start Time".ljust(25)+"End Time".ljust(25)+"Usage".ljust(25))
-                    print("---".ljust(25)+"---".ljust(25)+"---".ljust(25)+"---".ljust(25)+"---".ljust(25)+"---".ljust(25))
+                    print("Booking ID".ljust(15)+"Room ID".ljust(10)+"User".ljust(25)+"Start Time".ljust(25)+"End Time".ljust(25)+"Usage".ljust(30))
+                    print("---".ljust(15)+"---".ljust(10)+"---".ljust(25)+"---".ljust(25)+"---".ljust(25)+"---".ljust(30))
                     for booking in bookings:
-                        print(str(booking[0]).ljust(25)+booking[1].ljust(25)+booking[2].ljust(25)+booking[3].ljust(25)+booking[4].ljust(25)+booking[5].ljust(25))
+                        print(str(booking[0]).ljust(15)+booking[1].ljust(10)+booking[2].ljust(25)+booking[3].ljust(25)+booking[4].ljust(25)+booking[5].ljust(30))
                 else:
                     displayerror("No bookings found.")
 
@@ -448,9 +462,11 @@ def main():
                     if start == 'now':
                         start = now
                         displayinfo(f"Using current time {start} as start time.")
+                        command_notice = True
                     if end == 'now':
                         end = now
                         displayinfo(f"Using current time {end} as end time.")
+                        command_notice = True
 
                     if cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL AND strftime('%F %R', ?) IS NOT NULL", (start, end)).fetchone()[0] == 1:
                         if cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (start, end)).fetchone()[0] == "-":
@@ -459,16 +475,20 @@ def main():
                                 for room_id in room_ids:
                                     if cursor.execute("SELECT id FROM rooms WHERE id=?", [room_id]).fetchone() is None:
                                         displaywarning(f"Room '{room_id}' does not exist and is skipped.")
+                                        command_notice = True
                                         continue
                             
                                     booked = cursor.execute(f"SELECT id FROM bookings WHERE roomID = {room_id} AND substr(timediff(?, end),1,1) = '-' AND substr(timediff(start, ?),1,1) = '-'", (start, end)).fetchone()
 
                                     if booked is not None:
                                         displaywarning(f"Time slot is already booked (Booking ID: {booked[0]}) for room {room_id} and is skipped.")
+                                        command_notice = True
                                         continue
 
                                     actual_room_ids.append(room_id)
                                     cursor.execute("INSERT INTO bookings (roomID, username, start, end) VALUES (?, ?, strftime('%F %R', ?), strftime('%F %R', ?))", (room_id, currentuser, start, end))
+
+                                print() if command_notice else None
 
                                 if actual_room_ids:
                                     displaysuccess(f"Booking(s) for the following room(s) created successfully:")
@@ -501,18 +521,23 @@ def main():
                     booking = cursor.execute("SELECT username, start FROM bookings WHERE id=?", [booking_id]).fetchone()
                     if booking is None:
                         displaywarning(f"Booking ID '{booking_id}' does not exist and is skipped.")
+                        command_notice = True
                         continue
                     if booking[0] != currentuser and not isadmin:
                         displaywarning(f"You can only cancel your own bookings as a standard user. Booking ID '{booking_id}' is skipped.")
+                        command_notice = True
                         continue
                     if not isadmin and cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (booking[1], datetime.now().strftime('%Y-%m-%d %H:%M'))).fetchone()[0] == "-":
                         displaywarning(f"Booking ID '{booking_id}' is in the past and cannot be cancelled for a standard user.")
+                        command_notice = True
                         continue
                     actual_booking_ids.append(booking_id)
                     cursor.execute("DELETE FROM bookings WHERE id=?", [booking_id])
 
                 cursor.connection.commit()
                 cursor.connection.close()
+
+                print() if command_notice else None
 
                 if actual_booking_ids:
                     displaysuccess(f"The following bookings are cancelled successfully:")
@@ -538,21 +563,23 @@ def main():
 
                         params = []
                         if room_ids[0] != '*':
-                            room_ids = [room for room in room_ids if cursor.execute("SELECT id FROM rooms WHERE id=?", [room]).fetchone() is not None or displaywarning(f"Room '{room}' does not exist and is skipped.")]
+                            room_ids = [room for room in room_ids if cursor.execute("SELECT id FROM rooms WHERE id=?", [room]).fetchone() is not None or displaywarning(f"Room '{room}' does not exist and is skipped.") and (command_notice := True)]
                             params.extend(room_ids)
                         if user_ids[0] != '*':
-                            user_ids = [user for user in user_ids if cursor.execute("SELECT username FROM users WHERE username=?", [user]).fetchone() is not None or displaywarning(f"User '{user}' does not exist and is skipped.")]
+                            user_ids = [user for user in user_ids if cursor.execute("SELECT username FROM users WHERE username=?", [user]).fetchone() is not None or displaywarning(f"User '{user}' does not exist and is skipped.") and (command_notice := True)]
                             params.extend(user_ids)
                         now = datetime.now().strftime('%Y-%m-%d %H:%M')
                         if start != '*':
                             if start == 'now':
                                 start = now
                                 displayinfo(f"Using current time {start} as start time.")
+                                command_notice = True
                             params.append(start)
                         if end != '*':
                             if end == 'now':
                                 end = now
                                 displayinfo(f"Using current time {end} as end time.")
+                                command_notice = True
                             params.append(end)
                         params.append(usage)
 
@@ -570,9 +597,12 @@ def main():
                                         for booking in bookings:
                                             if booking[1] != currentuser and not isadmin:
                                                 displaywarning(f"You can only clear your own bookings as a standard user. Booking ID '{booking[0]}' is skipped.")
+                                                command_notice = True
                                                 continue
                                             actual_booking_ids.append(str(booking[0]))
                                             cursor.execute("DELETE FROM bookings WHERE id=?", [booking[0]])
+                                    
+                                    print() if command_notice else None
 
                                     if actual_booking_ids:
                                         displaysuccess(f"The following bookings are cleared successfully:")
@@ -624,9 +654,11 @@ def main():
                         for username in usernames:
                             if cursor.execute("SELECT username FROM users WHERE username=?", [username]).fetchone() is None:
                                 displaywarning(f"User '{username}' does not exist and is skipped.")
+                                command_notice = True
                                 continue
                             elif username == currentuser:
                                 displaywarning(f"You cannot deregister yourself. Please log in as another user first. Your username is skipped.")
+                                command_notice = True
                                 continue
                             actual_usernames.append(username)
                             cursor.execute("DELETE FROM bookings WHERE username=?", [username])
@@ -634,6 +666,8 @@ def main():
                             
                         cursor.connection.commit()
                         cursor.connection.close()
+
+                        print() if command_notice else None
 
                         if actual_usernames:
                             displaysuccess(f"The following users are deregistered successfully:")
@@ -688,12 +722,15 @@ def main():
                     for room_id in room_ids:
                         if cursor.execute("SELECT id FROM rooms WHERE id=?", [room_id]).fetchone() is not None:
                             displaywarning(f"Room '{room_id}' already exists and is skipped.")
+                            command_notice = True
                             continue
                         actual_room_ids.append(room_id)
                         cursor.execute("INSERT INTO rooms (id) VALUES (?)", [room_id])
 
                     cursor.connection.commit()
                     cursor.connection.close()
+
+                    print() if command_notice else None
 
                     if actual_room_ids:
                         displaysuccess(f"The following rooms are created successfully:")
@@ -713,6 +750,7 @@ def main():
                         for room_id in room_ids:
                             if cursor.execute("SELECT id FROM rooms WHERE id=?", [room_id]).fetchone() is None:
                                 displaywarning(f"Room '{room_id}' does not exist and is skipped.")
+                                command_notice = True
                                 continue
                             actual_room_ids.append(room_id)
                             cursor.execute("DELETE FROM bookings WHERE roomID=?", [room_id])
@@ -720,6 +758,8 @@ def main():
 
                         cursor.connection.commit()
                         cursor.connection.close()
+
+                        print() if command_notice else None
 
                         if actual_room_ids:
                             displaysuccess(f"The following rooms are deleted successfully:")
@@ -736,14 +776,14 @@ def main():
 
                     try:
                         result = cursor.execute(args[1]).fetchall()
+                    except sqlite3.Error as e:
+                        displayerror(f"Error executing SQL query:\n{e}")
+                    else:
+                        displaysuccess("SQL query executed successfully:")
                         for row in result:
                             for colindex in range(len(row)-1):
                                 print(str(row[colindex]).ljust(25))
                             print(row[-1])
-                        cursor.connection.commit()
-                        displaysuccess("SQL query executed successfully.")
-                    except sqlite3.Error as e:
-                        displayerror(f"Error executing SQL query:\n{e}")
                 
                     cursor.connection.commit()
                     cursor.connection.close()
