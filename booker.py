@@ -781,10 +781,11 @@ def main():
                     else:
                         displaysuccess("SQL query executed successfully:")
                         for row in result:
-                            for colindex in range(len(row)-1):
-                                print(str(row[colindex]).ljust(25))
-                            print(row[-1])
-                
+                            row_display = ""
+                            for colindex in range(len(row)):
+                                row_display += str(row[colindex]).ljust(25)
+                            print(row_display)
+
                     cursor.connection.commit()
                     cursor.connection.close()
                     
