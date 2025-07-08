@@ -18,7 +18,16 @@ def main():
     from hashlib import sha3_512
     from datetime import datetime
     import sqlite3
+    import re
     import os
+
+    # Functions
+    def regex_match(value, pattern):
+        try:
+            regex = re.compile(pattern)
+        except re.error:
+            return None
+        return regex.search(value) is not None
 
     # Program information
     info = "Booker v1.0"
@@ -89,9 +98,10 @@ def main():
                 "roomIDs": {"format": "csv", "wildcard": True, "default": "*"},
                 "usernames": {"format": "csv", "wildcard": True, "default": "*"},
                 "start": {"format": "time", "wildcard": True, "default": "now"},
-                "end": {"format": "time", "wildcard": True, "default": "*"}
+                "end": {"format": "time", "wildcard": True, "default": "*"},
+                "usage": {"format": "text", "default": "."}
             },
-            "help": "List bookings of the specified rooms booked by specified users within a given time.",
+            "help": "List bookings of the specified rooms booked by specified users within a given time. Usage can be filtered using a regular expression as well.",
             "use_requirement": "user"
         },
         "show": {
@@ -103,14 +113,15 @@ def main():
             "args": {
                 "roomIDs": {"format": "csv"},
                 "start": {"format": "time"},
-                "end": {"format": "time"}
+                "end": {"format": "time"},
+                "usage": {"format": "text"}
             },
             "help": "Make a reservation for specified rooms at a given time.",
             "use_requirement": "user"
         },
         "cancel": {
             "args": {"bookingIDs": {"format": "csv"}},
-            "help": "Cancel bookings by booking IDs. Standard users can only cancel their own bookings.",
+            "help": "Cancel bookings by booking IDs. Standard users can only cancel their own future bookings.",
             "use_requirement": "user"
         },
         "clear": {
@@ -118,9 +129,10 @@ def main():
                 "roomIDs": {"format": "csv", "wildcard": True},
                 "usernames": {"format": "csv", "wildcard": True},
                 "start": {"format": "time", "wildcard": True},
-                "end": {"format": "time", "wildcard": True}
+                "end": {"format": "time", "wildcard": True},
+                "usage": {"format": "text"}
             },
-            "help": "Cancel bookings to make available the specified rooms booked by specified users within a given time. Standard users can only clear their own bookings.",
+            "help": "Cancel bookings to make available the specified rooms booked by specified users within a given time. Usage can be filtered using a regular expression as well. Standard users can only clear their own future bookings.",
             "use_requirement": "user"
         }
     }
@@ -157,7 +169,7 @@ def main():
 
        # Create rooms table if it does not exist
        cursor.execute(
-           "CREATE TABLE rooms (id TEXT PRIMARY KEY)"
+           "CREATE TABLE rooms (id TEXT PRIMARY KEY, description TEXT NOT NULL DEFAULT '')"
        )
 
        displayinfo("Initialization: Created 'rooms' table.")
@@ -166,7 +178,7 @@ def main():
 
         # Create bookings table if it does not exist
         cursor.execute(
-            "CREATE TABLE bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, roomID TEXT, username TEXT, start TEXT NOT NULL, end TEXT NOT NULL, FOREIGN KEY (username) REFERENCES users(username), FOREIGN KEY (roomID) REFERENCES rooms(id))"
+            "CREATE TABLE bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, roomID TEXT, username TEXT, start TEXT NOT NULL, end TEXT NOT NULL, usage TEXT NOT NULL, FOREIGN KEY (username) REFERENCES users(username), FOREIGN KEY (roomID) REFERENCES rooms(id))"
         )
 
         # Create indexes
@@ -328,8 +340,10 @@ def main():
 
                 if rooms:
                     displaysuccess("Rooms found:")
+                    print("ID".ljust(25)+"Description".ljust(25))
+                    print("---".ljust(25)+"---".ljust(25))
                     for room in rooms:
-                        print(room[0])
+                        print(str(room[0]).ljust(25)+room[1].ljust(25))
                 else:
                     displaywarning("No rooms found. Please create rooms using the 'build' command.")
 
@@ -339,6 +353,7 @@ def main():
                 user_ids = args[2].split(',')
                 start = args[3]
                 end = args[4]
+                usage = args[5]
 
                 cursor = sqlite3.connect(databasepath).cursor()
 
@@ -349,38 +364,47 @@ def main():
                 if user_ids[0] != '*':
                     user_ids = [user for user in user_ids if cursor.execute("SELECT username FROM users WHERE username=?", [user]).fetchone() is not None or displaywarning(f"User '{user}' does not exist and is skipped.")]
                     params.extend(user_ids)
+                now = datetime.now().strftime('%Y-%m-%d %H:%M')
                 if start != '*':
                     if start == 'now':
-                        start = datetime.now().strftime('%Y-%m-%d %H:%M')
+                        start = now
                         displayinfo(f"Using current time {start} as start time.")
                     params.append(start)
                 if end != '*':
                     if end == 'now':
-                        end = datetime.now().strftime('%Y-%m-%d %H:%M')
+                        end = now
                         displayinfo(f"Using current time {end} as end time.")
                     params.append(end)
-                
+                params.append(usage)
+
                 if (start == '*' or cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL", [start]).fetchone()[0] == 1) and (end == '*' or cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL", [end]).fetchone()[0] == 1):
                     if start == '*' or end == '*' or cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (start, end)).fetchone()[0] == "-":
+                        if regex_match("", usage) is not None:
 
-                        query = f"SELECT * FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"} AND {"substr(timediff(?, end),1,1) = '-'" if start != '*' else "TRUE"} AND {"substr(timediff(start, ?),1,1) = '-'" if end != '*' else "TRUE"}"
+                            cursor.connection.create_function("REGEXP", 2, regex_match)
+
+                            query = f"SELECT * FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"} AND {"substr(timediff(?, end),1,1) = '-'" if start != '*' else "TRUE"} AND {"substr(timediff(start, ?),1,1) = '-'" if end != '*' else "TRUE"} AND usage REGEXP ?"
                 
-                        bookings = cursor.execute(query, params).fetchall()
-                        cursor.connection.commit()
-                        cursor.connection.close()
+                            bookings = cursor.execute(query, params).fetchall()
 
-                        if bookings:
-                            displaysuccess("Bookings found:")
-                            print("Booking ID".ljust(25)+"Room ID".ljust(25)+"User".ljust(25)+"Start Time".ljust(25)+"End Time".ljust(25))
-                            print("---".ljust(25)+"---".ljust(25)+"---".ljust(25)+"---".ljust(25)+"---".ljust(25))
-                            for booking in bookings:
-                                print(str(booking[0]).ljust(25)+booking[1].ljust(25)+booking[2].ljust(25)+booking[3].ljust(25)+booking[4].ljust(25))
+                            if bookings:
+                                displaysuccess("Bookings found:")
+                                print("Booking ID".ljust(25)+"Room ID".ljust(25)+"User".ljust(25)+"Start Time".ljust(25)+"End Time".ljust(25)+"Usage".ljust(25))
+                                print("---".ljust(25)+"---".ljust(25)+"---".ljust(25)+"---".ljust(25)+"---".ljust(25)+"---".ljust(25))
+                                for booking in bookings:
+                                    print(str(booking[0]).ljust(25)+booking[1].ljust(25)+booking[2].ljust(25)+booking[3].ljust(25)+booking[4].ljust(25)+booking[5].ljust(25))
+                            else:
+                                displaysuccess("No bookings found. The time slot is free.")
+
                         else:
-                            displaysuccess("No bookings found. The time slot is free.")
+                            displayerror("Usage input is invalid. Please use a valid regular expression for usage filtering.")
                     else:
                         displayerror("Time input is invalid. The end time must be after the start time.")
                 else:
                     displayerror("Invalid time format. Please use 'YYYY-MM-DD HH:MM' or 'now'.")
+
+                cursor.connection.commit()
+                cursor.connection.close()
 
             elif args[0] == "show":
 
@@ -402,10 +426,10 @@ def main():
 
                 if bookings:
                     displaysuccess("Bookings found:")
-                    print("Booking ID".ljust(25)+"Room ID".ljust(25)+"User".ljust(25)+"Start Time".ljust(25)+"End Time".ljust(25))
-                    print("---".ljust(25)+"---".ljust(25)+"---".ljust(25)+"---".ljust(25)+"---".ljust(25))
+                    print("Booking ID".ljust(25)+"Room ID".ljust(25)+"User".ljust(25)+"Start Time".ljust(25)+"End Time".ljust(25)+"Usage".ljust(25))
+                    print("---".ljust(25)+"---".ljust(25)+"---".ljust(25)+"---".ljust(25)+"---".ljust(25)+"---".ljust(25))
                     for booking in bookings:
-                        print(str(booking[0]).ljust(25)+booking[1].ljust(25)+booking[2].ljust(25)+booking[3].ljust(25)+booking[4].ljust(25))
+                        print(str(booking[0]).ljust(25)+booking[1].ljust(25)+booking[2].ljust(25)+booking[3].ljust(25)+booking[4].ljust(25)+booking[5].ljust(25))
                 else:
                     displayerror("No bookings found.")
 
@@ -418,40 +442,50 @@ def main():
 
                 cursor = sqlite3.connect(databasepath).cursor()
 
-                if start == 'now':
-                    start = datetime.now().strftime('%Y-%m-%d %H:%M')
-                    displayinfo(f"Using current time {start} as start time.")
-                if end == 'now':
-                    end = datetime.now().strftime('%Y-%m-%d %H:%M')
-                    displayinfo(f"Using current time {end} as end time.")
+                if start == 'now' or cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (start, datetime.now().strftime('%Y-%m-%d %H:%M'))).fetchone()[0] != "-":
 
-                if cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL AND strftime('%F %R', ?) IS NOT NULL", (start, end)).fetchone()[0] == 1:
-                    if cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (start, end)).fetchone()[0] == "-":
+                    now = datetime.now().strftime('%Y-%m-%d %H:%M')
+                    if start == 'now':
+                        start = now
+                        displayinfo(f"Using current time {start} as start time.")
+                    if end == 'now':
+                        end = now
+                        displayinfo(f"Using current time {end} as end time.")
 
-                        for room_id in room_ids:
-                            if cursor.execute("SELECT id FROM rooms WHERE id=?", [room_id]).fetchone() is None:
-                                displaywarning(f"Room '{room_id}' does not exist and is skipped.")
-                                continue
+                    if cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL AND strftime('%F %R', ?) IS NOT NULL", (start, end)).fetchone()[0] == 1:
+                        if cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (start, end)).fetchone()[0] == "-":
+                            if len(args[4]) > 0:
+
+                                for room_id in room_ids:
+                                    if cursor.execute("SELECT id FROM rooms WHERE id=?", [room_id]).fetchone() is None:
+                                        displaywarning(f"Room '{room_id}' does not exist and is skipped.")
+                                        continue
                             
-                            booked = cursor.execute(f"SELECT id FROM bookings WHERE roomID = {room_id} AND substr(timediff(?, end),1,1) = '-' AND substr(timediff(start, ?),1,1) = '-'", (start, end)).fetchone()
+                                    booked = cursor.execute(f"SELECT id FROM bookings WHERE roomID = {room_id} AND substr(timediff(?, end),1,1) = '-' AND substr(timediff(start, ?),1,1) = '-'", (start, end)).fetchone()
 
-                            if booked is not None:
-                                displaywarning(f"Time slot is already booked (Booking ID: {booked[0]}) for room {room_id} and is skipped.")
-                                continue
+                                    if booked is not None:
+                                        displaywarning(f"Time slot is already booked (Booking ID: {booked[0]}) for room {room_id} and is skipped.")
+                                        continue
 
-                            actual_room_ids.append(room_id)
-                            cursor.execute("INSERT INTO bookings (roomID, username, start, end) VALUES (?, ?, strftime('%F %R', ?), strftime('%F %R', ?))", (room_id, currentuser, start, end))
+                                    actual_room_ids.append(room_id)
+                                    cursor.execute("INSERT INTO bookings (roomID, username, start, end) VALUES (?, ?, strftime('%F %R', ?), strftime('%F %R', ?))", (room_id, currentuser, start, end))
 
-                        if actual_room_ids:
-                            displaysuccess(f"Booking(s) for the following room(s) created successfully:")
-                            print("\t".join(actual_room_ids))
+                                if actual_room_ids:
+                                    displaysuccess(f"Booking(s) for the following room(s) created successfully:")
+                                    print("\t".join(actual_room_ids))
 
+                                else:
+                                    displayerror("No bookings were created. Please check the time slot and room IDs.")
+                            
+                            else:
+                                displayerror("Usage cannot be empty. Please provide a description of the booking.")
                         else:
-                            displayerror("No bookings were created. Please check the time slot and room IDs.")
+                            displayerror("Time input is invalid. The end time must be after the start time.")
                     else:
-                        displayerror("Time input is invalid. The end time must be after the start time.")
+                        displayerror("Invalid time format. Please use 'YYYY-MM-DD HH:MM' or 'now'.")
+                
                 else:
-                    displayerror("Invalid time format. Please use 'YYYY-MM-DD HH:MM' or 'now'.")
+                    displayerror("Start time cannot be in the past. Please use a future time or 'now'.")
 
                 cursor.connection.commit()
                 cursor.connection.close()
@@ -464,12 +498,15 @@ def main():
                 cursor = sqlite3.connect(databasepath).cursor()
 
                 for booking_id in booking_ids:
-                    booking = cursor.execute("SELECT username FROM bookings WHERE id=?", [booking_id]).fetchone()
+                    booking = cursor.execute("SELECT username, start FROM bookings WHERE id=?", [booking_id]).fetchone()
                     if booking is None:
                         displaywarning(f"Booking ID '{booking_id}' does not exist and is skipped.")
                         continue
                     if booking[0] != currentuser and not isadmin:
                         displaywarning(f"You can only cancel your own bookings as a standard user. Booking ID '{booking_id}' is skipped.")
+                        continue
+                    if not isadmin and cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (booking[1], datetime.now().strftime('%Y-%m-%d %H:%M'))).fetchone()[0] == "-":
+                        displaywarning(f"Booking ID '{booking_id}' is in the past and cannot be cancelled for a standard user.")
                         continue
                     actual_booking_ids.append(booking_id)
                     cursor.execute("DELETE FROM bookings WHERE id=?", [booking_id])
@@ -489,6 +526,7 @@ def main():
                 user_ids = args[2].split(',')
                 start = args[3]
                 end = args[4]
+                usage = args[5]
 
                 if "*" not in (room_ids, user_ids, start, end) or input("You are using wildcard '*' in one or more arguments. This will cancel bookings massively. Are you sure you want to proceed? Enter 'yes' to confirm: ").lower() == "yes":
 
@@ -496,51 +534,65 @@ def main():
 
                     cursor = sqlite3.connect(databasepath).cursor()
 
-                    params = []
-                    if room_ids[0] != '*':
-                        room_ids = [room for room in room_ids if cursor.execute("SELECT id FROM rooms WHERE id=?", [room]).fetchone() is not None or displaywarning(f"Room '{room}' does not exist and is skipped.")]
-                        params.extend(room_ids)
-                    if user_ids[0] != '*':
-                        user_ids = [user for user in user_ids if cursor.execute("SELECT username FROM users WHERE username=?", [user]).fetchone() is not None or displaywarning(f"User '{user}' does not exist and is skipped.")]
-                        params.extend(user_ids)
-                    if start != '*':
-                        if start == 'now':
-                            start = datetime.now().strftime('%Y-%m-%d %H:%M')
-                            displayinfo(f"Using current time {start} as start time.")
-                        params.append(start)
-                    if end != '*':
-                        if end == 'now':
-                            end = datetime.now().strftime('%Y-%m-%d %H:%M')
-                            displayinfo(f"Using current time {end} as end time.")
-                        params.append(end)
+                    if isadmin or start == 'now' or cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (start, datetime.now().strftime('%Y-%m-%d %H:%M'))).fetchone()[0] != "-":
 
-                    if (start == '*' or cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL", [start]).fetchone()[0] == 1) and (end == '*' or cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL", [end]).fetchone()[0] == 1):
-                        if start == '*' or end == '*' or cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (start, end)).fetchone()[0] == "-":
+                        params = []
+                        if room_ids[0] != '*':
+                            room_ids = [room for room in room_ids if cursor.execute("SELECT id FROM rooms WHERE id=?", [room]).fetchone() is not None or displaywarning(f"Room '{room}' does not exist and is skipped.")]
+                            params.extend(room_ids)
+                        if user_ids[0] != '*':
+                            user_ids = [user for user in user_ids if cursor.execute("SELECT username FROM users WHERE username=?", [user]).fetchone() is not None or displaywarning(f"User '{user}' does not exist and is skipped.")]
+                            params.extend(user_ids)
+                        now = datetime.now().strftime('%Y-%m-%d %H:%M')
+                        if start != '*':
+                            if start == 'now':
+                                start = now
+                                displayinfo(f"Using current time {start} as start time.")
+                            params.append(start)
+                        if end != '*':
+                            if end == 'now':
+                                end = now
+                                displayinfo(f"Using current time {end} as end time.")
+                            params.append(end)
+                        params.append(usage)
 
-                            query = f"SELECT id, username FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"} AND {"substr(timediff(?, end),1,1) = '-'" if start != '*' else "TRUE"} AND {"substr(timediff(start, ?),1,1) = '-'" if end != '*' else "TRUE"}"
+                        if (start == '*' or cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL", [start]).fetchone()[0] == 1) and (end == '*' or cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL", [end]).fetchone()[0] == 1):
+                            if start == '*' or end == '*' or cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (start, end)).fetchone()[0] == "-":
+                                if regex_match("", usage) is not None:
 
-                            bookings = cursor.execute(query, params).fetchall()
+                                    cursor.connection.create_function("REGEXP", 2, regex_match)
 
-                            if bookings:
-                                for booking in bookings:
-                                    if booking[1] != currentuser and not isadmin:
-                                        displaywarning(f"You can only clear your own bookings as a standard user. Booking ID '{booking[0]}' is skipped.")
-                                        continue
-                                    actual_booking_ids.append(str(booking[0]))
-                                    cursor.execute("DELETE FROM bookings WHERE id=?", [booking[0]])
+                                    query = f"SELECT id, username FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"} AND {"substr(timediff(?, end),1,1) = '-'" if start != '*' else "TRUE"} AND {"substr(timediff(start, ?),1,1) = '-'" if end != '*' else "TRUE"}"
 
-                            if actual_booking_ids:
-                                displaysuccess(f"The following bookings are cleared successfully:")
-                                print("\t".join(actual_booking_ids))
+                                    bookings = cursor.execute(query, params).fetchall()
+
+                                    if bookings:
+                                        for booking in bookings:
+                                            if booking[1] != currentuser and not isadmin:
+                                                displaywarning(f"You can only clear your own bookings as a standard user. Booking ID '{booking[0]}' is skipped.")
+                                                continue
+                                            actual_booking_ids.append(str(booking[0]))
+                                            cursor.execute("DELETE FROM bookings WHERE id=?", [booking[0]])
+
+                                    if actual_booking_ids:
+                                        displaysuccess(f"The following bookings are cleared successfully:")
+                                        print("\t".join(actual_booking_ids))
+                                    else:
+                                        displayerror("No bookings were cleared.")
+
+                                else:
+                                    displayerror("Usage input is invalid. Please use a valid regular expression for usage filtering.")
                             else:
-                                displayerror("No bookings were cleared.")
-
-                            cursor.connection.commit()
-                            cursor.connection.close()
+                                displayerror("Time input is invalid. The end time must be after the start time.")
                         else:
-                            displayerror("Time input is invalid. The end time must be after the start time.")
+                            displayerror("Invalid time format. Please use 'YYYY-MM-DD HH:MM' or 'now'.")
+
                     else:
-                        displayerror("Invalid time format. Please use 'YYYY-MM-DD HH:MM' or 'now'.")
+                        displayerror("Clearing past bookings is not allowed for a standard user. Please use a future time or 'now' as start time.")
+
+                    cursor.connection.commit()
+                    cursor.connection.close()
+
                 else:
                     displayerror("Clearing bookings cancelled.")
                 
