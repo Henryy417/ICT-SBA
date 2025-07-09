@@ -35,7 +35,7 @@ def main():
     copyright = "Copyright (c) 2025 Chen Hang Tsz Henry"
 
     # Customizable program information
-    databasepath = str(Path(__file__).resolve().parent)+"data.db"
+    databasepath = str(Path(__file__).resolve().parent)+"/data.db"
     # Placeholder for user authentication
     currentuser = None  # Placeholder for current user
     isadmin = False  # Placeholder for admin status
@@ -814,7 +814,7 @@ if __name__ == "__main__":
         from traceback import format_exc, print_exc
 
         displayerror(f"Program terminated due to unexpectedly error.\nError info:\n{format_exc()}")
-        with open(str(Path(__file__).resolve().parent)+"error.log", "a") as f:
+        with open(str(Path(__file__).resolve().parent)+"/error.log", "a") as f:
             f.write(str(datetime.now())+"\n")
             print_exc(file=f)
             f.write("\n\n\n")
