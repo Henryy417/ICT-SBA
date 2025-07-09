@@ -17,9 +17,10 @@ def main():
     from getpass import getpass
     from hashlib import sha3_512
     from datetime import datetime
+    from os import system as sysexec, name as sysname
+    from pathlib import Path
     import sqlite3
     import re
-    import os
 
     # Functions
     def regex_match(pattern, value=""):
@@ -34,8 +35,7 @@ def main():
     copyright = "Copyright (c) 2025 Chen Hang Tsz Henry"
 
     # Customizable program information
-    databasepath = os.path.realpath(os.path.dirname(__file__))+"/data.db"
-
+    databasepath = str(Path(__file__).resolve().parent)+"data.db"
     # Placeholder for user authentication
     currentuser = None  # Placeholder for current user
     isadmin = False  # Placeholder for admin status
@@ -304,7 +304,7 @@ def main():
 
         elif args[0] == "cls":
 
-            os.system("cls" if os.name == "nt" else "clear")
+            sysexec("cls" if sysname == "nt" else "clear")
 
         elif args[0] == "login":
 
@@ -809,12 +809,12 @@ if __name__ == "__main__":
         displayerror("Program terminated due to user keyboard interrupt (Ctrl+C).")
         exit(1)
     except:
-        from os import path
+        from pathlib import Path
         from datetime import datetime
         from traceback import format_exc, print_exc
 
         displayerror(f"Program terminated due to unexpectedly error.\nError info:\n{format_exc()}")
-        with open(path.realpath(path.dirname(__file__))+"/error.log", "a") as f:
+        with open(str(Path(__file__).resolve().parent)+"error.log", "a") as f:
             f.write(str(datetime.now())+"\n")
             print_exc(file=f)
             f.write("\n\n\n")
