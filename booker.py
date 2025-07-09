@@ -22,7 +22,7 @@ def main():
     import os
 
     # Functions
-    def regex_match(value, pattern):
+    def regex_match(pattern, value=""):
         try:
             regex = re.compile(pattern)
         except re.error:
@@ -388,11 +388,11 @@ def main():
 
                 if (start == '*' or cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL", [start]).fetchone()[0] == 1) and (end == '*' or cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL", [end]).fetchone()[0] == 1):
                     if start == '*' or end == '*' or cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (start, end)).fetchone()[0] == "-":
-                        if regex_match("", usage) is not None:
+                        if regex_match(usage) is not None:
 
-                            cursor.connection.create_function("REGEXP", 2, regex_match)
+                            cursor.connection.create_function("regex", 2, regex_match)
 
-                            query = f"SELECT * FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"} AND {"substr(timediff(?, end),1,1) = '-'" if start != '*' else "TRUE"} AND {"substr(timediff(start, ?),1,1) = '-'" if end != '*' else "TRUE"} AND usage REGEXP ?"
+                            query = f"SELECT * FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"} AND {"substr(timediff(?, end),1,1) = '-'" if start != '*' else "TRUE"} AND {"substr(timediff(start, ?),1,1) = '-'" if end != '*' else "TRUE"} AND regex(?, usage)"
                 
                             bookings = cursor.execute(query, params).fetchall()
 
@@ -452,6 +452,7 @@ def main():
                 room_ids = args[1].split(',')
                 start = args[2]
                 end = args[3]
+                usage = args[4]
                 actual_room_ids = []
 
                 cursor = sqlite3.connect(databasepath).cursor()
@@ -486,7 +487,7 @@ def main():
                                         continue
 
                                     actual_room_ids.append(room_id)
-                                    cursor.execute("INSERT INTO bookings (roomID, username, start, end) VALUES (?, ?, strftime('%F %R', ?), strftime('%F %R', ?))", (room_id, currentuser, start, end))
+                                    cursor.execute("INSERT INTO bookings (roomID, username, start, end, usage) VALUES (?, ?, strftime('%F %R', ?), strftime('%F %R', ?), ?)", (room_id, currentuser, start, end, usage))
 
                                 print() if command_notice else None
 
@@ -585,11 +586,11 @@ def main():
 
                         if (start == '*' or cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL", [start]).fetchone()[0] == 1) and (end == '*' or cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL", [end]).fetchone()[0] == 1):
                             if start == '*' or end == '*' or cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (start, end)).fetchone()[0] == "-":
-                                if regex_match("", usage) is not None:
+                                if regex_match(usage) is not None:
 
-                                    cursor.connection.create_function("REGEXP", 2, regex_match)
+                                    cursor.connection.create_function("regex", 2, regex_match)
 
-                                    query = f"SELECT id, username FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"} AND {"substr(timediff(?, end),1,1) = '-'" if start != '*' else "TRUE"} AND {"substr(timediff(start, ?),1,1) = '-'" if end != '*' else "TRUE"}"
+                                    query = f"SELECT id, username FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"} AND {"substr(timediff(?, end),1,1) = '-'" if start != '*' else "TRUE"} AND {"substr(timediff(start, ?),1,1) = '-'" if end != '*' else "TRUE"} AND regex(?, usage)"
 
                                     bookings = cursor.execute(query, params).fetchall()
 
