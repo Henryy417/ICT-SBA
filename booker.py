@@ -550,7 +550,7 @@ def main():
 
                     cursor.connection.commit()
                     cursor.connection.close()
-                    
+
                 else:
                     displayerror("Usage cannot be empty. Please provide a description of the booking.")
 
@@ -882,13 +882,11 @@ if __name__ == "__main__":
     except:
         from pathlib import Path
         from datetime import datetime
-        from traceback import format_exc, print_exc
+        from traceback import format_exc
 
         displayerror(f"Program terminated due to unexpectedly error.\nError info:\n{format_exc()}")
         with open(str(Path(__file__).resolve().parent)+"/error.log", "a") as f:
-            f.write(str(datetime.now())+"\n")
-            print_exc(file=f)
-            f.write("\n\n\n")
+            f.write(str(datetime.now())+"\n"+format_exc()+"\n\n\n")
 
         exit(1)
 else:
