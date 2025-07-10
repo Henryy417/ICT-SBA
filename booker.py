@@ -12,6 +12,7 @@ def displayinfo(msg): # Information Message: User may want to know this but noth
     print(f"\33[34m{msg}\33[0m")
 
 def main():
+    ## Initialization ##
     # Import necessary modules
     from shlex import split, join
     from getpass import getpass
@@ -47,7 +48,7 @@ def main():
         "help": {"help": "Show help message."},
         "man": {"args": {"command": {"format": "text"}}, "help": "Show manual for a specific command."},
         "exit": {"help": "Exit Booker."},
-        "ver": {"help": "Show current version info."},
+        "version": {"help": "Show current version info."},
         "cls": {"help": "Clear the screen."},
         "login": {"args": {"username": {"format": "text"}}, "help": "Log in as a user."},
         # Commands usable as admins
@@ -204,7 +205,7 @@ def main():
 
     print() # Print a newline for better readability
 
-    # Main loop
+    ## Main loop ##
     while True:
 
         parser_notice = False
@@ -263,7 +264,8 @@ def main():
 
         print() if parser_notice else None # Print a newline if there was a parser notice
 
-        # Handle commands
+        ## Handle commands ##
+        # Commands that can be used before login
         if args[0] == "help":
 
             print("Use 'man' to receive more information about a specific command.")
@@ -285,7 +287,6 @@ def main():
 
             print("Command".ljust(10)+"Description".ljust(25))
             print("---".ljust(10)+"---".ljust(25))
-
             for cmd, details in available_commands.items():
                     print(cmd.ljust(10)+details['help'].ljust(25))
 
@@ -296,7 +297,7 @@ def main():
                 syntax_text = args[1]+" "
                 if 'args' in available_commands[args[1]]:
                     for arg, prop in available_commands[args[1]]["args"].items():
-                        syntax_text += f"[{prop['format']}{"|*" if 'wildcard' in prop else ''}: {arg}{"="+str(prop.get('default')) if 'default' in prop else ''}] "
+                        syntax_text += f"[{prop['format']}{"|*" if 'wildcard' in prop else ''}: {arg}{"="+str(prop.get('default')) if 'default' in prop else ''}] " # Syntax for each argument
                 print(syntax_text.strip())
                 print("\nDescription:")
                 print(available_commands[args[1]]['help'])
@@ -333,6 +334,7 @@ def main():
             else:
                 displayerror("Invalid username or password.")
 
+        # Commands that can be used only after login
         elif currentuser is not None:
             if args[0] == "cp":
 
