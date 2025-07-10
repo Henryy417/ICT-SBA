@@ -216,7 +216,7 @@ def main():
             args = split(input((('\33[31m'+currentuser+'\33[0m' if isadmin else currentuser) if currentuser is not None else "") + "> "))
         except ValueError:
             displayerror("Invalid input. Looks like you forget a closing quote somewhere, or escape characters are not used properly.\nQuotes and backslashes, when used literally, should be escaped with a backslash (\\).")
-            print()
+            print() # Print a newline for better readability
             continue
         
         # Ignore empty input
@@ -231,7 +231,7 @@ def main():
                         possiblecmds.append(cmd)
             if len(possiblecmds) == 0:
                 displayerror(f"Command or abbreviation '{args[0]}' not found. Type 'help' for a list of commands.")
-                print()
+                print() # Print a newline for better readability
                 continue
             elif len(possiblecmds) == 1:
                 args[0] = possiblecmds[0]
@@ -239,7 +239,7 @@ def main():
                 parser_notice = True
             else:
                 displayerror(f"Command abbreviation '{args[0]}' is ambiguous. Which of the following commands did you mean: {', '.join(possiblecmds)}?")
-                print()
+                print() # Print a newline for better readability
                 continue
 
         # Check required number of arguments and fill defaults if necessary
@@ -256,7 +256,7 @@ def main():
                 parser_notice = True
             else:
                 displayerror(f"Command '{args[0]}' uses {len(available_commands[args[0]]['args']) if 'args' in available_commands[args[0]] else 0} argument(s). Got {len(args)-1}. Default values are not provided for missing arguments.")
-                print()
+                print() # Print a newline for better readability
                 continue
         elif len(args)-1 > (len(available_commands[args[0]]['args']) if 'args' in available_commands[args[0]] else 0):
             displaywarning(f"Command '{args[0]}' requires only {len(available_commands[args[0]]['args']) if 'args' in available_commands[args[0]] else 0} argument(s). Got {len(args)-1}.")
@@ -408,7 +408,7 @@ def main():
                 
                             bookings = cursor.execute(query, params).fetchall()
 
-                            print() if command_notice else None
+                            print() if command_notice else None # Print a newline if there was a in-command notice
 
                             if bookings:
                                 displaysuccess("Bookings found:")
@@ -435,6 +435,7 @@ def main():
                 bookings = []
 
                 cursor = sqlite3.connect(databasepath).cursor()
+
                 if booking_ids[0] == '*':
                     bookings = cursor.execute("SELECT * FROM bookings").fetchall()
                 else:
@@ -445,10 +446,11 @@ def main():
                             command_notice = True
                             continue
                         bookings.append(booking)
+
                 cursor.connection.commit()
                 cursor.connection.close()
 
-                print() if command_notice else None
+                print() if command_notice else None # Print a newline if there was a in-command notice
 
                 if bookings:
                     displaysuccess("Bookings found:")
@@ -501,7 +503,7 @@ def main():
                                     actual_room_ids.append(room_id)
                                     cursor.execute("INSERT INTO bookings (roomID, username, start, end, usage) VALUES (?, ?, strftime('%F %R', ?), strftime('%F %R', ?), ?)", (room_id, currentuser, start, end, usage))
 
-                                print() if command_notice else None
+                                print() if command_notice else None # Print a newline if there was a in-command notice
 
                                 if actual_room_ids:
                                     displaysuccess(f"Booking(s) for the following room(s) created successfully:")
@@ -550,6 +552,14 @@ def main():
                         actual_booking_ids.append(booking_id)
                         cursor.execute("UPDATE bookings SET usage=? WHERE id=?", (usage, booking_id))
 
+                    print() if command_notice else None # Print a newline if there was a in-command notice
+
+                    if actual_booking_ids:
+                        displaysuccess(f"The following bookings are modified successfully:")
+                        print("\t".join(actual_booking_ids))
+                    else:
+                        displayerror("No bookings were modified. Please check the booking IDs.")
+
                     cursor.connection.commit()
                     cursor.connection.close()
 
@@ -583,7 +593,7 @@ def main():
                 cursor.connection.commit()
                 cursor.connection.close()
 
-                print() if command_notice else None
+                print() if command_notice else None # Print a newline if there was a in-command notice
 
                 if actual_booking_ids:
                     displaysuccess(f"The following bookings are cancelled successfully:")
@@ -648,7 +658,7 @@ def main():
                                             actual_booking_ids.append(str(booking[0]))
                                             cursor.execute("DELETE FROM bookings WHERE id=?", [booking[0]])
                                     
-                                    print() if command_notice else None
+                                    print() if command_notice else None # Print a newline if there was a in-command notice
 
                                     if actual_booking_ids:
                                         displaysuccess(f"The following bookings are cleared successfully:")
@@ -690,7 +700,8 @@ def main():
 
                 elif args[0] == "dereg":
 
-                    if input(f"Are you sure you want to deregister the users? Their bookings will be as well cancelled. Enter 'yes' to confirm: ").lower() == "yes":
+                    if input(f"Are you sure you want to deregister the users? Their bookings will be as well cancelled. Enter 'yes' to confirm: ").lower() == "yes":\
+                    
                         usernames = args[1].split(',')
                         actual_usernames = []
 
@@ -713,13 +724,14 @@ def main():
                         cursor.connection.commit()
                         cursor.connection.close()
 
-                        print() if command_notice else None
+                        print() if command_notice else None # Print a newline if there was a in-command notice
 
                         if actual_usernames:
                             displaysuccess(f"The following users are deregistered successfully:")
                             print("\t".join(actual_usernames))
                         else:
                             displayerror("No users were deregistered.")
+
                     else:
                         displayerror("Deregistration cancelled.")
                 
@@ -777,7 +789,7 @@ def main():
                     cursor.connection.commit()
                     cursor.connection.close()
 
-                    print() if command_notice else None
+                    print() if command_notice else None # Print a newline if there was a in-command notice
 
                     if actual_room_ids:
                         displaysuccess(f"The following rooms are created successfully:")
@@ -804,7 +816,7 @@ def main():
                     cursor.connection.commit()
                     cursor.connection.close()
 
-                    print() if command_notice else None
+                    print() if command_notice else None # Print a newline if there was a in-command notice
 
                     if actual_room_ids:
                         displaysuccess(f"The following rooms are updated successfully:")
@@ -815,6 +827,7 @@ def main():
                 elif args[0] == "destroy":
 
                     if input(f"Are you sure you want to delete the rooms? Their bookings will be as well cancelled. Enter 'yes' to confirm: ").lower() == "yes":
+
                         room_ids = args[1].split(',')
                         actual_room_ids = []
 
@@ -833,13 +846,14 @@ def main():
                         cursor.connection.commit()
                         cursor.connection.close()
 
-                        print() if command_notice else None
+                        print() if command_notice else None # Print a newline if there was a in-command notice
 
                         if actual_room_ids:
                             displaysuccess(f"The following rooms are deleted successfully:")
                             print("\t".join(actual_room_ids))
                         else:
                             displayerror("No rooms were deleted.")
+
                     else:
                         displayerror("Deletion cancelled.")
                 
@@ -862,17 +876,12 @@ def main():
 
                     cursor.connection.commit()
                     cursor.connection.close()
-                    
-            else:
-                displayerror(f"Command '{args[0]}' is not available for standard users.")
-        else:
-            displayerror(f"You must be logged in to use the command '{args[0]}'. Use 'login' to log in as a user first.")
 
-        print()
+        print() # Print a newline for better readability
 
 
 
-# Make sure the script can only be run as a standalone program
+## Making sure the script can only be run as a standalone program & Global error handling ##
 if __name__ == "__main__":
     try:
         main()
