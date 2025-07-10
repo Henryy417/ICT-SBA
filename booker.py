@@ -19,16 +19,16 @@ def main():
     from datetime import datetime
     from os import system as sysexec, name as sysname
     from pathlib import Path
+    from re import compile as regex_compile, error as regex_error
     import sqlite3
-    import re
 
-    # Functions
+    # Functional Functions
     def regex_match(pattern, value=""):
         try:
-            regex = re.compile(pattern)
-        except re.error:
-            return None
-        return regex.search(value) is not None
+            regex = regex_compile(pattern)
+        except regex_error:
+            return None # Return None if the regex pattern is invalid
+        return regex.match(value) is not None
 
     # Program information
     info = "Booker v1.0"
@@ -36,6 +36,7 @@ def main():
 
     # Customizable program information
     databasepath = str(Path(__file__).resolve().parent)+"/data.db"
+
     # Placeholder for user authentication
     currentuser = None  # Placeholder for current user
     isadmin = False  # Placeholder for admin status
@@ -70,8 +71,13 @@ def main():
             "use_requirement": "admin"
         },
         "build": {
-            "args": {"roomIDs": {"format": "csv"}},
+            "args": {"roomIDs": {"format": "csv"}, "description": {"format": "text", "default": "Classroom"}},
             "help": "Create new rooms with specified IDs.",
+            "use_requirement": "admin"
+        },
+        "refurnish": {
+            "args": {"roomIDs": {"format": "csv"}, "description": {"format": "text", "default": "Classroom"}},
+            "help": "Update the description of existing rooms with specified IDs.",
             "use_requirement": "admin"
         },
         "destroy": {
@@ -101,7 +107,7 @@ def main():
                 "end": {"format": "time", "wildcard": True, "default": "*"},
                 "usage": {"format": "text", "default": "."}
             },
-            "help": "List bookings of the specified rooms booked by specified users within a given time. Usage can be filtered using a regular expression as well.",
+            "help": "List bookings of the specified rooms booked by specified users within a given time. Usage can be filtered using a regular expression.",
             "use_requirement": "user"
         },
         "show": {
@@ -119,6 +125,11 @@ def main():
             "help": "Make a reservation for specified rooms at a given time.",
             "use_requirement": "user"
         },
+        "modify": {
+            "args": {"bookingIDs": {"format": "csv"}, "Description": {"format": "text"}},
+            "help": "Modify the description of bookings by booking IDs. Standard users can only modify their own future bookings.",
+            "use_requirement": "user"
+        },
         "cancel": {
             "args": {"bookingIDs": {"format": "csv"}},
             "help": "Cancel bookings by booking IDs. Standard users can only cancel their own future bookings.",
@@ -132,7 +143,7 @@ def main():
                 "end": {"format": "time", "wildcard": True},
                 "usage": {"format": "text"}
             },
-            "help": "Cancel bookings to make available the specified rooms booked by specified users within a given time. Usage can be filtered using a regular expression as well. Standard users can only clear their own future bookings.",
+            "help": "Cancel bookings to make available the specified rooms booked by specified users within a given time. Usage can be filtered using a regular expression. Standard users can only clear their own future bookings.",
             "use_requirement": "user"
         }
     }
@@ -169,7 +180,7 @@ def main():
 
        # Create rooms table if it does not exist
        cursor.execute(
-           "CREATE TABLE rooms (id TEXT PRIMARY KEY)"
+           "CREATE TABLE rooms (id TEXT PRIMARY KEY, description TEXT NOT NULL)"
        )
 
        displayinfo("Initialization: Created 'rooms' table.")
@@ -191,9 +202,9 @@ def main():
     cursor.connection.commit()
     cursor.connection.close()
 
-    print()
+    print() # Print a newline for better readability
 
-    # Main loop for command input
+    # Main loop
     while True:
 
         parser_notice = False
@@ -250,7 +261,7 @@ def main():
             displaywarning(f"Command '{args[0]}' requires only {len(available_commands[args[0]]['args']) if 'args' in available_commands[args[0]] else 0} argument(s). Got {len(args)-1}.")
             parser_notice = True
 
-        print() if parser_notice else None
+        print() if parser_notice else None # Print a newline if there was a parser notice
 
         # Handle commands
         if args[0] == "help":
@@ -261,7 +272,7 @@ def main():
             print("Arguments are separated by spaces. If an argument contains spaces, it must be quoted with single or double quotes.")
             print("Default values of arguments, if exist, will be filled when not enough arguments are provided.")
 
-            print()
+            print() # Print a newline for better readability
 
             if currentuser is not None:
                 print("Arguments of \33[3mcsv\33[0m values, commonly seen if more than one value is allowed in an argument (e.g. IDs), are separated by commas without spaces. e.g. 'room1,room2,room3'.")
@@ -270,7 +281,7 @@ def main():
             else:
                 print("More commands are available after login.")
 
-            print()
+            print() # Print a newline for better readability
 
             print("Command".ljust(10)+"Description".ljust(25))
             print("---".ljust(10)+"---".ljust(25))
@@ -289,7 +300,6 @@ def main():
                 print(syntax_text.strip())
                 print("\nDescription:")
                 print(available_commands[args[1]]['help'])
-
             else:
                 displayerror(f"No manual entry for command '{args[1]}'.")
 
@@ -304,7 +314,7 @@ def main():
 
         elif args[0] == "cls":
 
-            sysexec("cls" if sysname == "nt" else "clear")
+            sysexec("cls" if sysname == "nt" else "clear") # Microsoft time
 
         elif args[0] == "login":
 
@@ -347,10 +357,10 @@ def main():
 
                 if rooms:
                     displaysuccess("Rooms found:")
-                    print("ID".ljust(10))
-                    print("---".ljust(10))
+                    print("ID".ljust(10)+"Description".ljust(25))
+                    print("---".ljust(10)+"---".ljust(25))
                     for room in rooms:
-                        print(str(room[0]).ljust(10))
+                        print(str(room[0]).ljust(10)+room[1].ljust(25))
                 else:
                     displaywarning("No rooms found. Please create rooms using the 'build' command.")
 
@@ -471,7 +481,7 @@ def main():
 
                     if cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL AND strftime('%F %R', ?) IS NOT NULL", (start, end)).fetchone()[0] == 1:
                         if cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (start, end)).fetchone()[0] == "-":
-                            if len(args[4]) > 0:
+                            if len(usage) > 0:
 
                                 for room_id in room_ids:
                                     if cursor.execute("SELECT id FROM rooms WHERE id=?", [room_id]).fetchone() is None:
@@ -511,6 +521,39 @@ def main():
                 cursor.connection.commit()
                 cursor.connection.close()
 
+            elif args[0] == "modify":
+
+                booking_ids = args[1].split(',')
+                usage = args[2]
+                actual_booking_ids = []
+
+                if len(usage) != 0:
+                    
+                    cursor = sqlite3.connect(databasepath).cursor()
+
+                    for booking_id in booking_ids:
+                        booking = cursor.execute("SELECT username, start FROM bookings WHERE id=?", [booking_id]).fetchone()
+                        if booking is None:
+                            displaywarning(f"Booking ID '{booking_id}' does not exist and is skipped.")
+                            command_notice = True
+                            continue
+                        if booking[0] != currentuser and not isadmin:
+                            displaywarning(f"You can only modify your own bookings as a standard user. Booking ID '{booking_id}' is skipped.")
+                            command_notice = True
+                            continue
+                        if not isadmin and cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (booking[1], datetime.now().strftime('%Y-%m-%d %H:%M'))).fetchone()[0] == "-":
+                            displaywarning(f"Booking ID '{booking_id}' is in the past and cannot be modified by a standard user.")
+                            command_notice = True
+                            continue
+                        actual_booking_ids.append(booking_id)
+                        cursor.execute("UPDATE bookings SET usage=? WHERE id=?", (usage, booking_id))
+
+                    cursor.connection.commit()
+                    cursor.connection.close()
+                    
+                else:
+                    displayerror("Usage cannot be empty. Please provide a description of the booking.")
+
             elif args[0] == "cancel":
 
                 booking_ids = args[1].split(',')
@@ -529,7 +572,7 @@ def main():
                         command_notice = True
                         continue
                     if not isadmin and cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (booking[1], datetime.now().strftime('%Y-%m-%d %H:%M'))).fetchone()[0] == "-":
-                        displaywarning(f"Booking ID '{booking_id}' is in the past and cannot be cancelled for a standard user.")
+                        displaywarning(f"Booking ID '{booking_id}' is in the past and cannot be cancelled by a standard user.")
                         command_notice = True
                         continue
                     actual_booking_ids.append(booking_id)
@@ -716,6 +759,7 @@ def main():
                 elif args[0] == "build":
 
                     room_ids = args[1].split(',')
+                    description = args[2]
                     actual_room_ids = []
 
                     cursor = sqlite3.connect(databasepath).cursor()
@@ -726,7 +770,7 @@ def main():
                             command_notice = True
                             continue
                         actual_room_ids.append(room_id)
-                        cursor.execute("INSERT INTO rooms (id) VALUES (?)", [room_id])
+                        cursor.execute("INSERT INTO rooms (id, description) VALUES (?, ?)", [room_id, description])
 
                     cursor.connection.commit()
                     cursor.connection.close()
@@ -738,6 +782,33 @@ def main():
                         print("\t".join(actual_room_ids))
                     else:
                         displayerror("No rooms were created.")
+
+                elif args[0] == "refurnish":
+
+                    room_ids = args[1].split(',')
+                    description = args[2]
+                    actual_room_ids = []
+
+                    cursor = sqlite3.connect(databasepath).cursor()
+
+                    for room_id in room_ids:
+                        if cursor.execute("SELECT id FROM rooms WHERE id=?", [room_id]).fetchone() is None:
+                            displaywarning(f"Room '{room_id}' does not exist and is skipped.")
+                            command_notice = True
+                            continue
+                        actual_room_ids.append(room_id)
+                        cursor.execute("UPDATE rooms SET description=? WHERE id=?", [description, room_id])
+
+                    cursor.connection.commit()
+                    cursor.connection.close()
+
+                    print() if command_notice else None
+
+                    if actual_room_ids:
+                        displaysuccess(f"The following rooms are updated successfully:")
+                        print("\t".join(actual_room_ids))
+                    else:
+                        displayerror("No rooms were updated.")
 
                 elif args[0] == "destroy":
 
