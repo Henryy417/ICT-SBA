@@ -1,2 +1,4 @@
 data.db
 error.log
+/dist
+/build

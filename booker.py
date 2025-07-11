@@ -1,3 +1,7 @@
+# Global imports
+from pathlib import Path
+from datetime import datetime
+
 # Global program functions
 def displayerror(msg): # Error Message: User must solve this to receive expected results
     print(f"\33[31m{msg}\33[0m")
@@ -13,13 +17,11 @@ def displayinfo(msg): # Information Message: User may want to know this but noth
 
 def main():
     ## Initialization ##
-    # Import necessary modules
+    # Functional imports
     from shlex import split, join
     from getpass import getpass
     from hashlib import sha3_512
-    from datetime import datetime
     from os import system as sysexec, name as sysname
-    from pathlib import Path
     from re import compile as regex_compile, error as regex_error
     import sqlite3
 
@@ -91,6 +93,7 @@ def main():
             "help": "Execute a raw SQL query. The SQL query must be quoted. Be careful with this command as it can modify the database.",
             "use_requirement": "admin"
         },
+        ""
         # Commands usable as standard users
         "cp": {
             "help": "Change the password of the current user.",
@@ -306,7 +309,7 @@ def main():
 
         elif args[0] == "exit":
 
-            exit(0)
+            raise SystemExit(0)
 
         elif args[0] == "version":
 
@@ -353,7 +356,7 @@ def main():
             elif args[0] == "rooms":
 
                 cursor = sqlite3.connect(databasepath).cursor()
-                rooms = cursor.execute("SELECT id FROM rooms").fetchall()
+                rooms = cursor.execute("SELECT id, description FROM rooms").fetchall()
                 cursor.connection.commit()
                 cursor.connection.close()
 
@@ -886,20 +889,22 @@ if __name__ == "__main__":
     try:
         main()
     except SystemExit:
-        exit(0)
+        raise # Allow SystemExit to propagate normally
     except KeyboardInterrupt:
         displayerror("Program terminated due to user keyboard interrupt (Ctrl+C).")
-        exit(1)
+        print() # Print a newline for better readability
+        raise SystemExit(1)
     except:
-        from pathlib import Path
         from datetime import datetime
         from traceback import format_exc
 
         displayerror(f"Program terminated due to unexpectedly error.\nError info:\n{format_exc()}")
+        print() # Print a newline for better readability
         with open(str(Path(__file__).resolve().parent)+"/error.log", "a") as f:
             f.write(str(datetime.now())+"\n"+format_exc()+"\n\n\n")
 
-        exit(1)
+        raise SystemExit(1)
 else:
     displayerror("Booker cannot be imported as a module.")
-    exit(1)
+    print() # Print a newline for better readability
+    raise SystemExit(1)
