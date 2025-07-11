@@ -495,8 +495,8 @@ def main():
                                         displaywarning(f"Room '{room_id}' does not exist and is skipped.")
                                         command_notice = True
                                         continue
-                            
-                                    booked = cursor.execute(f"SELECT id FROM bookings WHERE roomID = {room_id} AND substr(timediff(?, end),1,1) = '-' AND substr(timediff(start, ?),1,1) = '-'", (start, end)).fetchone()
+
+                                    booked = cursor.execute(f"SELECT id FROM bookings WHERE roomID = ? AND substr(timediff(?, end),1,1) = '-' AND substr(timediff(start, ?),1,1) = '-'", (room_id, start, end)).fetchone()
 
                                     if booked is not None:
                                         displaywarning(f"Time slot is already booked (Booking ID: {booked[0]}) for room {room_id} and is skipped.")
