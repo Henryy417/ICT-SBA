@@ -1,4 +1,4 @@
-data.db
-error.log
-/dist
-/build
+/src/data.db
+/src/error.log
+/dist/
+/build/
