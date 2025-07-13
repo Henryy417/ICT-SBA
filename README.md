@@ -14,18 +14,18 @@ Booker is a command-line room booking system for managing users, rooms, and book
 
 ## Getting Started
 1. To use it on your computer, run the script as a standalone program:
-```bash
-python main.py
-```
+    ```bash
+    python main.py
+    ```
 2. If you want a single executable:
-Use `pyinstaller` in the **root directory of this repository** to compile the Python source code into an executable:
-```bash
-pyinstaller Booker.spec
-```
-Then run the generated executable in the `dist` folder:
-> Note: The option for icons in `Booker.spec` is set to `icon=['assets\\Booker.ico']`, which only works on Windows. Edit it accordingly if you are using a different OS.
+    Use `pyinstaller` in the **root directory of this repository** to compile the Python source code into an executable:
+    ```bash
+    pyinstaller Booker.spec
+    ```
+    Then run the generated executable in the `dist` folder:
+    > Note: The option for icons in `Booker.spec` is set to `icon=['assets\\Booker.ico']`, which only works on Windows. Edit it accordingly if you are using a different OS.
 3. If you want to make Booker a back-end shell:
-Compile the source file like in (2). Manage Booker's standard input/output/error streams in your front-end app. If you are using Python, you may need the `subprocess` module.
+    Compile the source file like in (2). Manage Booker's standard input/output/error streams in your front-end app. If you are using Python, you may need the `subprocess` module.
 
 ## Command Reference
 These are the currently available commands in Booker:
