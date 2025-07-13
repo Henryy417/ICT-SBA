@@ -115,4 +115,4 @@ Booking ID     Room ID   User                     Start Time               End T
 > Note: The default user is `admin` with password `admin`, created automatically on first run.
 
 ## License
-Copyright (c) 2025 Chen Hang Tsz Henry
+This project is licensed under the MIT License by Chen Hang Tsz Henry. See the [LICENSE](LICENSE) file for details.

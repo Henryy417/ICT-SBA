@@ -35,7 +35,6 @@ def main():
 
     # Program information
     info = "Booker v1.0"
-    copyright = "Copyright (c) 2025 Chen Hang Tsz Henry"
 
     # Customizable program information
     databasepath = str(Path(__file__).resolve().parent)+"/data.db"
@@ -164,7 +163,6 @@ def main():
 
     # Print program information
     print(info)
-    print(copyright)
     print("Type 'help' for a list of commands.")
 
     # Initialize database and create necessary tables if they do not exist
@@ -314,7 +312,6 @@ def main():
         elif args[0] == "version":
 
             print(info)
-            print(copyright)
 
         elif args[0] == "cls":
 
