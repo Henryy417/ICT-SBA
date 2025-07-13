@@ -23,6 +23,7 @@ Booker is a command-line room booking system for managing users, rooms, and book
     pyinstaller Booker.spec
     ```
     Then run the generated executable in the `dist` folder.
+
     > Note: The option for icons in `Booker.spec` is set to `icon=['assets\\Booker.ico']`, which only works on Windows. Edit it accordingly if you are using a different OS.
 3. If you want to make Booker a back-end shell:
     Compile the source file like in (2). Manage Booker's standard input/output/error streams in your front-end app. If you are using Python, you may need the `subprocess` module.
@@ -79,7 +80,6 @@ These are the currently available commands in Booker:
 
 ## Data Storage
 If you run Booker from Python script, the files will be stored in the same directory as the script.
-
 If you run it as an executable, the files will be stored in the `_internal` directory next to the executable.
 
 ## Example Usage: Setting up Booker
