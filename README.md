@@ -83,7 +83,7 @@ If you run Booker from Python script, the files will be stored in the same direc
 If you run it as an executable, the files will be stored in the `_internal` directory next to the executable.
 
 ## Example Usage: Setting up Booker
-```bash
+```
 > l admin
 Command abbreviation interpreted as 'login'.
 
