@@ -5,12 +5,12 @@ Booker is a command-line room booking system for managing users, rooms, and book
 
 ## Features
 - User and admin authentication
-- Register/deregister users (admin only)
-- Change password (user and admin)
-- Create, update, and delete rooms (admin only)
+- Register/deregister users
+- Change password
+- Create, update, and delete rooms
 - Book, modify, cancel, and clear bookings
 - Search and show bookings with flexible filters
-- Raw SQL query execution (admin only)
+- Raw SQL query execution
 
 ## Getting Started
 1. To use it on your computer, run the script as a standalone program:
