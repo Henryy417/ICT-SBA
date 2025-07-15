@@ -37,7 +37,7 @@ def main():
     info = "Booker v1.0"
 
     # Customizable program information
-    databasepath = str(Path(__file__).resolve().parent)+"/data.db"
+    databasepath = Path(__file__).resolve().parent/"data.db"
 
     # Placeholder for user authentication
     currentuser = None  # Placeholder for current user
@@ -312,6 +312,18 @@ def main():
         elif args[0] == "version":
 
             print(info)
+            
+            print() # Print a newline for better readability
+
+            # Search for license file in the same directory and the parent directory as this script
+            if (Path(__file__).resolve().parent/"LICENSE").exists():
+                with open(Path(__file__).resolve().parent/"LICENSE", "r") as license_file:
+                    print(license_file.read())
+            elif (Path(__file__).resolve().parent.parent/"LICENSE").exists():
+                with open(Path(__file__).resolve().parent.parent/"LICENSE", "r") as license_file:
+                    print(license_file.read())
+            else:
+                displaywarning("No license file is found. This program is released under the MIT License. Please refer to the source code repository for more information.")
 
         elif args[0] == "cls":
 
@@ -897,7 +909,7 @@ if __name__ == "__main__":
 
         displayerror(f"Program terminated due to unexpectedly error.\nError info:\n{format_exc()}")
         print() # Print a newline for better readability
-        with open(str(Path(__file__).resolve().parent)+"/error.log", "a") as f:
+        with open(Path(__file__).resolve().parent/"error.log", "a") as f:
             f.write(str(datetime.now())+"\n"+format_exc()+"\n\n\n")
 
         raise SystemExit(1)
