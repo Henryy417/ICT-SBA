@@ -323,7 +323,8 @@ def main():
                 with open(Path(__file__).resolve().parent.parent/"LICENSE", "r") as license_file:
                     print(license_file.read())
             else:
-                displaywarning("No license file is found. This program is released under the MIT License. Please refer to the source code repository for more information.")
+                displayerror("No license file is found. This may indicate illegal distribution.")
+                displayerror("This program is released under the MIT License by Chen Hang Tsz Henry. Please refer to the source code repository for more information.")
 
         elif args[0] == "cls":
 
