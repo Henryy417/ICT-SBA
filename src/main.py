@@ -34,10 +34,10 @@ def main():
         return regex.match(value) is not None
 
     # Program information
-    info = "Booker v1.0"
+    INFO = "Booker v1.0"
 
     # Customizable program information
-    databasepath = Path(__file__).resolve().parent/"data.db"
+    DB_PATH = Path(__file__).resolve().parent/"data.db"
 
     # Placeholder for user authentication
     currentuser = None  # Placeholder for current user
@@ -52,6 +52,7 @@ def main():
         "version": {"help": "Show current version info."},
         "cls": {"help": "Clear the screen."},
         "login": {"args": {"username": {"format": "text"}}, "help": "Log in as a user."},
+        "gui": {"help": "Start the GUI version of Booker."},
         # Commands usable as admins
         "reg": {
             "args": {"username": {"format": "text"}},
@@ -92,7 +93,6 @@ def main():
             "help": "Execute a raw SQL query. The SQL query must be quoted. Be careful with this command as it can modify the database.",
             "use_requirement": "admin"
         },
-        ""
         # Commands usable as standard users
         "cp": {
             "help": "Change the password of the current user.",
@@ -162,11 +162,11 @@ def main():
     update_available_commands() # Update available commands based on current user status
 
     # Print program information
-    print(info)
+    print(INFO)
     print("Type 'help' for a list of commands.")
 
     # Initialize database and create necessary tables if they do not exist
-    cursor = sqlite3.connect(databasepath).cursor()
+    cursor = sqlite3.connect(DB_PATH).cursor()
 
     if cursor.execute("SELECT type FROM sqlite_master WHERE type='table' AND name='users'").fetchone() is None:
 
@@ -311,7 +311,7 @@ def main():
 
         elif args[0] == "version":
 
-            print(info)
+            print(INFO)
             
             print() # Print a newline for better readability
 
@@ -334,7 +334,7 @@ def main():
 
             pwhash = sha3_512(getpass("Password: ").encode()).digest()
 
-            cursor = sqlite3.connect(databasepath).cursor()
+            cursor = sqlite3.connect(DB_PATH).cursor()
             result = cursor.execute("SELECT isadmin FROM users WHERE username=? AND pwhash=?", (args[1], pwhash)).fetchone()
             cursor.connection.commit()
             cursor.connection.close()
@@ -354,7 +354,7 @@ def main():
                 if (new_password := getpass("New Password: ")) == getpass("Confirm New Password: "):
                     new_pwhash = sha3_512(new_password.encode()).digest()
 
-                    cursor = sqlite3.connect(databasepath).cursor()
+                    cursor = sqlite3.connect(DB_PATH).cursor()
                     cursor.execute("UPDATE users SET pwhash=? WHERE username=?", (new_pwhash, currentuser))
                     cursor.connection.commit()
                     cursor.connection.close()
@@ -365,7 +365,7 @@ def main():
 
             elif args[0] == "rooms":
 
-                cursor = sqlite3.connect(databasepath).cursor()
+                cursor = sqlite3.connect(DB_PATH).cursor()
                 rooms = cursor.execute("SELECT id, description FROM rooms").fetchall()
                 cursor.connection.commit()
                 cursor.connection.close()
@@ -387,7 +387,7 @@ def main():
                 end = args[4]
                 usage = args[5]
 
-                cursor = sqlite3.connect(databasepath).cursor()
+                cursor = sqlite3.connect(DB_PATH).cursor()
 
                 params = []
                 if room_ids[0] != '*':
@@ -447,7 +447,7 @@ def main():
                 booking_ids = args[1].split(',')
                 bookings = []
 
-                cursor = sqlite3.connect(databasepath).cursor()
+                cursor = sqlite3.connect(DB_PATH).cursor()
 
                 if booking_ids[0] == '*':
                     bookings = cursor.execute("SELECT * FROM bookings").fetchall()
@@ -482,7 +482,7 @@ def main():
                 usage = args[4]
                 actual_room_ids = []
 
-                cursor = sqlite3.connect(databasepath).cursor()
+                cursor = sqlite3.connect(DB_PATH).cursor()
 
                 if start == 'now' or cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (start, datetime.now().strftime('%Y-%m-%d %H:%M'))).fetchone()[0] != "-":
 
@@ -546,7 +546,7 @@ def main():
 
                 if len(usage) != 0:
                     
-                    cursor = sqlite3.connect(databasepath).cursor()
+                    cursor = sqlite3.connect(DB_PATH).cursor()
 
                     for booking_id in booking_ids:
                         booking = cursor.execute("SELECT username, start FROM bookings WHERE id=?", [booking_id]).fetchone()
@@ -584,7 +584,7 @@ def main():
                 booking_ids = args[1].split(',')
                 actual_booking_ids = []
 
-                cursor = sqlite3.connect(databasepath).cursor()
+                cursor = sqlite3.connect(DB_PATH).cursor()
 
                 for booking_id in booking_ids:
                     booking = cursor.execute("SELECT username, start FROM bookings WHERE id=?", [booking_id]).fetchone()
@@ -626,7 +626,7 @@ def main():
 
                     actual_booking_ids = []
 
-                    cursor = sqlite3.connect(databasepath).cursor()
+                    cursor = sqlite3.connect(DB_PATH).cursor()
 
                     if isadmin or start == 'now' or cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (start, datetime.now().strftime('%Y-%m-%d %H:%M'))).fetchone()[0] != "-":
 
@@ -699,7 +699,7 @@ def main():
 
                 if args[0] == "reg":
                     
-                    cursor = sqlite3.connect(databasepath).cursor()
+                    cursor = sqlite3.connect(DB_PATH).cursor()
 
                     if cursor.execute("SELECT username FROM users WHERE username=?", [args[1]]).fetchone() is None:
                         pwhash = sha3_512(getpass("Password: ").encode()).digest()
@@ -718,7 +718,7 @@ def main():
                         usernames = args[1].split(',')
                         actual_usernames = []
 
-                        cursor = sqlite3.connect(databasepath).cursor()
+                        cursor = sqlite3.connect(DB_PATH).cursor()
                         cursor.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
 
                         for username in usernames:
@@ -750,7 +750,7 @@ def main():
                 
                 elif args[0] == "cpx":
 
-                    cursor = sqlite3.connect(databasepath).cursor()
+                    cursor = sqlite3.connect(DB_PATH).cursor()
 
                     if cursor.execute("SELECT username FROM users WHERE username=?", [args[1]]).fetchone() is not None:
                         new_password = getpass("New Password: ")
@@ -769,7 +769,7 @@ def main():
 
                 elif args[0] == "users":
 
-                    cursor = sqlite3.connect(databasepath).cursor()
+                    cursor = sqlite3.connect(DB_PATH).cursor()
                     users = cursor.execute("SELECT * FROM users").fetchall()
                     cursor.connection.commit()
                     cursor.connection.close()
@@ -789,7 +789,7 @@ def main():
                     description = args[2]
                     actual_room_ids = []
 
-                    cursor = sqlite3.connect(databasepath).cursor()
+                    cursor = sqlite3.connect(DB_PATH).cursor()
                     
                     for room_id in room_ids:
                         if cursor.execute("SELECT id FROM rooms WHERE id=?", [room_id]).fetchone() is not None:
@@ -816,7 +816,7 @@ def main():
                     description = args[2]
                     actual_room_ids = []
 
-                    cursor = sqlite3.connect(databasepath).cursor()
+                    cursor = sqlite3.connect(DB_PATH).cursor()
 
                     for room_id in room_ids:
                         if cursor.execute("SELECT id FROM rooms WHERE id=?", [room_id]).fetchone() is None:
@@ -844,7 +844,7 @@ def main():
                         room_ids = args[1].split(',')
                         actual_room_ids = []
 
-                        cursor = sqlite3.connect(databasepath).cursor()
+                        cursor = sqlite3.connect(DB_PATH).cursor()
                         cursor.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
 
                         for room_id in room_ids:
@@ -872,7 +872,7 @@ def main():
                 
                 elif args[0] == "sql":
 
-                    cursor = sqlite3.connect(databasepath).cursor()
+                    cursor = sqlite3.connect(DB_PATH).cursor()
                     cursor.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
 
                     try:

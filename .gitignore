@@ -2,3 +2,4 @@
 /src/error.log
 /dist/
 /build/
+/src/__pycache__/
