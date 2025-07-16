@@ -3,17 +3,29 @@ from pathlib import Path
 from datetime import datetime
 
 # Global program functions
-def displayerror(msg): # Error Message: User must solve this to receive expected results
+def displayerror(msg: str): # Error Message: User must solve this to receive expected results
     print(f"\33[31m{msg}\33[0m")
 
-def displaysuccess(msg): # Success Message: User receives expected results
+def displaysuccess(msg: str): # Success Message: User receives expected results
     print(f"\33[32m{msg}\33[0m")
 
-def displaywarning(msg): # Warning Message: User may want to solve this to receive better results
+def displaywarning(msg: str): # Warning Message: User may want to solve this to receive better results
     print(f"\33[33m{msg}\33[0m")
 
-def displayinfo(msg): # Information Message: User may want to know this but nothing is wrong nor actions needed
+def displayinfo(msg: str): # Information Message: User may want to know this but nothing is wrong nor actions needed
     print(f"\33[34m{msg}\33[0m")
+
+def display_table(headers: list, widths: list, *rows: list):
+    line_buffer = ""
+    for header, width in zip(headers, widths):
+        line_buffer += header.ljust(width)
+    print(line_buffer)
+
+    for row in rows:
+        line_buffer = ""
+        for item, width in zip(row, widths):
+            line_buffer += str(item).ljust(width)
+        print(line_buffer)
 
 def main():
     ## Initialization ##
@@ -26,7 +38,12 @@ def main():
     import sqlite3
 
     # Functional Functions
-    def regex_match(pattern, value=""):
+    def update_available_commands():
+        for cmd, details in commands.items():
+            if not ('use_requirement' in details and (details['use_requirement'] == "admin" and not isadmin or details['use_requirement'] == "user" and currentuser is None)):
+                available_commands[cmd] = details
+
+    def regex_match(pattern: str, value: str = ""):
         try:
             regex = regex_compile(pattern)
         except regex_error:
@@ -151,13 +168,7 @@ def main():
         }
     }
 
-    # List of available commands based on user status
-    available_commands = {}
-
-    def update_available_commands():
-        for cmd, details in commands.items():
-            if not ('use_requirement' in details and (details['use_requirement'] == "admin" and not isadmin or details['use_requirement'] == "user" and currentuser is None)):
-                available_commands[cmd] = details
+    available_commands = {} # List of available commands based on user status
     
     update_available_commands() # Update available commands based on current user status
 
@@ -286,10 +297,11 @@ def main():
 
             print() # Print a newline for better readability
 
-            print("Command".ljust(10)+"Description".ljust(25))
-            print("---".ljust(10)+"---".ljust(25))
-            for cmd, details in available_commands.items():
-                    print(cmd.ljust(10)+details['help'].ljust(25))
+            display_table(
+                headers=["Command", "Description"],
+                widths=[15, 0],
+                *[(cmd, details['help']) for cmd, details in available_commands.items()]
+            )
 
         elif args[0] == "man":
 
@@ -372,10 +384,11 @@ def main():
 
                 if rooms:
                     displaysuccess("Rooms found:")
-                    print("ID".ljust(10)+"Description".ljust(25))
-                    print("---".ljust(10)+"---".ljust(25))
-                    for room in rooms:
-                        print(str(room[0]).ljust(10)+room[1].ljust(25))
+                    display_table(
+                        headers=["ID", "Description"],
+                        widths=[10, 0],
+                        *rooms
+                    )
                 else:
                     displaywarning("No rooms found. Please create rooms using the 'build' command.")
 
@@ -425,10 +438,11 @@ def main():
 
                             if bookings:
                                 displaysuccess("Bookings found:")
-                                print("Booking ID".ljust(15)+"Room ID".ljust(10)+"User".ljust(25)+"Start Time".ljust(25)+"End Time".ljust(25)+"Usage".ljust(30))
-                                print("---".ljust(15)+"---".ljust(10)+"---".ljust(25)+"---".ljust(25)+"---".ljust(25)+"---".ljust(30))
-                                for booking in bookings:
-                                    print(str(booking[0]).ljust(15)+booking[1].ljust(10)+booking[2].ljust(25)+booking[3].ljust(25)+booking[4].ljust(25)+booking[5].ljust(30))
+                                display_table(
+                                    headers=["Booking ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
+                                    widths=[10, 10, 20, 20, 20, 0],
+                                    *bookings
+                                )
                             else:
                                 displaysuccess("No bookings found. The time slot is free.")
 
@@ -467,10 +481,11 @@ def main():
 
                 if bookings:
                     displaysuccess("Bookings found:")
-                    print("Booking ID".ljust(15)+"Room ID".ljust(10)+"User".ljust(25)+"Start Time".ljust(25)+"End Time".ljust(25)+"Usage".ljust(30))
-                    print("---".ljust(15)+"---".ljust(10)+"---".ljust(25)+"---".ljust(25)+"---".ljust(25)+"---".ljust(30))
-                    for booking in bookings:
-                        print(str(booking[0]).ljust(15)+booking[1].ljust(10)+booking[2].ljust(25)+booking[3].ljust(25)+booking[4].ljust(25)+booking[5].ljust(30))
+                    display_table(
+                        headers=["Booking ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
+                        widths=[10, 10, 20, 20, 20, 0],
+                        *bookings
+                    )
                 else:
                     displayerror("No bookings found.")
 
@@ -520,7 +535,11 @@ def main():
 
                                 if actual_room_ids:
                                     displaysuccess(f"Booking(s) for the following room(s) created successfully:")
-                                    print("\t".join(actual_room_ids))
+                                    display_table(
+                                        headers=["Room ID"],
+                                        widths=[10],
+                                        *[[room_id] for room_id in actual_room_ids]
+                                    )
 
                                 else:
                                     displayerror("No bookings were created. Please check the time slot and room IDs.")
@@ -569,7 +588,11 @@ def main():
 
                     if actual_booking_ids:
                         displaysuccess(f"The following bookings are modified successfully:")
-                        print("\t".join(actual_booking_ids))
+                        display_table(
+                            headers=["Booking ID"],
+                            widths=[10],
+                            *[[booking_id] for booking_id in actual_booking_ids]
+                        )
                     else:
                         displayerror("No bookings were modified. Please check the booking IDs.")
 
@@ -610,7 +633,11 @@ def main():
 
                 if actual_booking_ids:
                     displaysuccess(f"The following bookings are cancelled successfully:")
-                    print("\t".join(actual_booking_ids))
+                    display_table(
+                        headers=["Booking ID"],
+                        widths=[10],
+                        *[[booking_id] for booking_id in actual_booking_ids]
+                    )
                 else:
                     displayerror("No bookings were cancelled.")
 
@@ -675,7 +702,11 @@ def main():
 
                                     if actual_booking_ids:
                                         displaysuccess(f"The following bookings are cleared successfully:")
-                                        print("\t".join(actual_booking_ids))
+                                        display_table(
+                                            headers=["Booking ID"],
+                                            widths=[10],
+                                            *[[booking_id] for booking_id in actual_booking_ids]
+                                        )
                                     else:
                                         displayerror("No bookings were cleared.")
 
@@ -741,7 +772,11 @@ def main():
 
                         if actual_usernames:
                             displaysuccess(f"The following users are deregistered successfully:")
-                            print("\t".join(actual_usernames))
+                            display_table(
+                                headers=["Username"],
+                                widths=[20],
+                                *[[username] for username in actual_usernames]
+                            )
                         else:
                             displayerror("No users were deregistered.")
 
@@ -776,10 +811,11 @@ def main():
 
                     if users:
                         displaysuccess("Users found:")
-                        print("Username".ljust(25)+"Admin")
-                        print("---".ljust(25)+"---".ljust(25))
-                        for user in users:
-                            print(user[0].ljust(25)+("Yes" if user[1] else "No").ljust(25))
+                        display_table(
+                            headers=["Admin", "Username"],
+                            widths=[5, 0],
+                            *[("Yes" if user[1] else "No", user[0]) for user in users]
+                        )
                     else:
                         displaywarning("No users found. Please register users using the 'reg' command.")
 
@@ -806,7 +842,11 @@ def main():
 
                     if actual_room_ids:
                         displaysuccess(f"The following rooms are created successfully:")
-                        print("\t".join(actual_room_ids))
+                        display_table(
+                            headers=["Room ID"],
+                            widths=[10],
+                            *[[room_id] for room_id in actual_room_ids]
+                        )
                     else:
                         displayerror("No rooms were created.")
 
@@ -833,7 +873,11 @@ def main():
 
                     if actual_room_ids:
                         displaysuccess(f"The following rooms are updated successfully:")
-                        print("\t".join(actual_room_ids))
+                        display_table(
+                            headers=["Room ID"],
+                            widths=[10],
+                            *[[room_id] for room_id in actual_room_ids]
+                        )
                     else:
                         displayerror("No rooms were updated.")
 
@@ -863,7 +907,11 @@ def main():
 
                         if actual_room_ids:
                             displaysuccess(f"The following rooms are deleted successfully:")
-                            print("\t".join(actual_room_ids))
+                            display_table(
+                                headers=["Room ID"],
+                                widths=[10],
+                                *[[room_id] for room_id in actual_room_ids]
+                            )
                         else:
                             displayerror("No rooms were deleted.")
 
@@ -881,11 +929,11 @@ def main():
                         displayerror(f"Error executing SQL query:\n{e}")
                     else:
                         displaysuccess("SQL query executed successfully:")
-                        for row in result:
-                            row_display = ""
-                            for colindex in range(len(row)):
-                                row_display += str(row[colindex]).ljust(25)
-                            print(row_display)
+                        display_table(
+                            headers=[description[0] for description in cursor.description],
+                            widths=[25 for _ in range(len(cursor.description))],
+                            *result
+                        )
 
                     cursor.connection.commit()
                     cursor.connection.close()
