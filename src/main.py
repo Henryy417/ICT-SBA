@@ -4,16 +4,16 @@ from datetime import datetime
 
 # Global program functions
 def displayerror(msg: str): # Error Message: User must solve this to receive expected results
-    print(f"\33[31m{msg}\33[0m")
+    print(f"\33[91m{msg}\33[0m")
 
 def displaysuccess(msg: str): # Success Message: User receives expected results
-    print(f"\33[32m{msg}\33[0m")
+    print(f"\33[92m{msg}\33[0m")
 
 def displaywarning(msg: str): # Warning Message: User may want to solve this to receive better results
-    print(f"\33[33m{msg}\33[0m")
+    print(f"\33[93m{msg}\33[0m")
 
 def displayinfo(msg: str): # Information Message: User may want to know this but nothing is wrong nor actions needed
-    print(f"\33[34m{msg}\33[0m")
+    print(f"\33[94m{msg}\33[0m")
 
 def display_table(headers: list, widths: list, *rows: list):
     line_buffer = ""
@@ -73,17 +73,12 @@ def main():
         # Commands usable as admins
         "reg": {
             "args": {"username": {"format": "text"}},
-            "help": "Register a new user.",
+            "help": "Register a new user or change the password of an existing user.",
             "use_requirement": "admin"
         },
         "dereg": {
             "args": {"username": {"format": "csv"}},
             "help": "Deregister users.",
-            "use_requirement": "admin"
-        },
-        "cpx": {
-            "args": {"username": {"format": "text"}},
-            "help": "Change the password of a user. Defaults to the current user if no username is provided.",
             "use_requirement": "admin"
         },
         "users": {
@@ -92,12 +87,7 @@ def main():
         },
         "build": {
             "args": {"roomIDs": {"format": "csv"}, "description": {"format": "text", "default": "Classroom"}},
-            "help": "Create new rooms with specified IDs.",
-            "use_requirement": "admin"
-        },
-        "refurnish": {
-            "args": {"roomIDs": {"format": "csv"}, "description": {"format": "text", "default": "Classroom"}},
-            "help": "Update the description of existing rooms with specified IDs.",
+            "help": "Create new rooms or change the description of existing rooms with specified IDs.",
             "use_requirement": "admin"
         },
         "destroy": {
@@ -169,7 +159,6 @@ def main():
     }
 
     available_commands = {} # List of available commands based on user status
-    
     update_available_commands() # Update available commands based on current user status
 
     # Print program information
@@ -177,43 +166,45 @@ def main():
     print("Type 'help' for a list of commands.")
 
     # Initialize database and create necessary tables if they do not exist
-    cursor = sqlite3.connect(DB_PATH).cursor()
-
-    if cursor.execute("SELECT type FROM sqlite_master WHERE type='table' AND name='users'").fetchone() is None:
+    connection = sqlite3.connect(DB_PATH)
+    
+    if connection.execute("SELECT type FROM sqlite_master WHERE type='table' AND name='users'").fetchone() is None:
 
         # Create users table if it does not exist
-        cursor.execute(
-            "CREATE TABLE users (username TEXT PRIMARY KEY, pwhash BLOB NOT NULL, isadmin BOOLEAN NOT NULL DEFAULT 0)"
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, pwhash BLOB NOT NULL, isadmin BOOLEAN NOT NULL DEFAULT 0)"
         )
-        cursor.execute("INSERT INTO users (username, pwhash, isadmin) VALUES (?, ?, ?)", ("admin", sha3_512(b"admin").digest(), 1))
+        connection.execute("INSERT INTO users (username, pwhash, isadmin) VALUES (?, ?, ?)", ("admin", sha3_512(b"admin").digest(), 1))
+        connection.commit()
 
         displayinfo("Initialization: Created 'users' table and added default admin user.")
-    
-    if cursor.execute("SELECT type FROM sqlite_master WHERE type='table' AND name='rooms'").fetchone() is None:
+
+    if connection.execute("SELECT type FROM sqlite_master WHERE type='table' AND name='rooms'").fetchone() is None:
 
        # Create rooms table if it does not exist
-       cursor.execute(
-           "CREATE TABLE rooms (id TEXT PRIMARY KEY, description TEXT NOT NULL)"
+       connection.execute(
+           "CREATE TABLE IF NOT EXISTS rooms (id TEXT PRIMARY KEY, description TEXT NOT NULL)"
        )
+       connection.commit()
 
        displayinfo("Initialization: Created 'rooms' table.")
 
-    if cursor.execute("SELECT type FROM sqlite_master WHERE type='table' AND name='bookings'").fetchone() is None:
+    if connection.execute("SELECT type FROM sqlite_master WHERE type='table' AND name='bookings'").fetchone() is None:
 
         # Create bookings table if it does not exist
-        cursor.execute(
-            "CREATE TABLE bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, roomID TEXT, username TEXT, start TEXT NOT NULL, end TEXT NOT NULL, usage TEXT NOT NULL, FOREIGN KEY (username) REFERENCES users(username), FOREIGN KEY (roomID) REFERENCES rooms(id))"
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, roomID TEXT, username TEXT, start TEXT NOT NULL, end TEXT NOT NULL, usage TEXT NOT NULL, FOREIGN KEY (username) REFERENCES users(username), FOREIGN KEY (roomID) REFERENCES rooms(id))"
         )
 
         # Create indexes
-        cursor.execute("CREATE INDEX idx_bookings_room_user ON bookings (roomID, username)")
-        cursor.execute("CREATE INDEX idx_bookings_user ON bookings (username)")
-        cursor.execute("CREATE INDEX idx_bookings_time ON bookings (start)")
+        connection.execute("CREATE INDEX IF NOT EXISTS idx_bookings_room_user ON bookings (roomID, username)")
+        connection.execute("CREATE INDEX IF NOT EXISTS idx_bookings_user ON bookings (username)")
+        connection.execute("CREATE INDEX IF NOT EXISTS idx_bookings_time ON bookings (start)")
+        connection.commit()
 
         displayinfo("Initialization: Created 'bookings' table.")
 
-    cursor.connection.commit()
-    cursor.connection.close()
+    connection.close()
 
     print() # Print a newline for better readability
 
@@ -346,10 +337,10 @@ def main():
 
             pwhash = sha3_512(getpass("Password: ").encode()).digest()
 
-            cursor = sqlite3.connect(DB_PATH).cursor()
-            result = cursor.execute("SELECT isadmin FROM users WHERE username=? AND pwhash=?", (args[1], pwhash)).fetchone()
-            cursor.connection.commit()
-            cursor.connection.close()
+            connection = sqlite3.connect(DB_PATH)
+            result = connection.execute("SELECT isadmin FROM users WHERE username=? AND pwhash=?", (args[1], pwhash)).fetchone()
+            connection.commit()
+            connection.close()
 
             if result is not None:
                 currentuser = args[1]
@@ -366,10 +357,10 @@ def main():
                 if (new_password := getpass("New Password: ")) == getpass("Confirm New Password: "):
                     new_pwhash = sha3_512(new_password.encode()).digest()
 
-                    cursor = sqlite3.connect(DB_PATH).cursor()
-                    cursor.execute("UPDATE users SET pwhash=? WHERE username=?", (new_pwhash, currentuser))
-                    cursor.connection.commit()
-                    cursor.connection.close()
+                    connection = sqlite3.connect(DB_PATH)
+                    connection.execute("UPDATE users SET pwhash=? WHERE username=?", (new_pwhash, currentuser))
+                    connection.commit()
+                    connection.close()
 
                     displaysuccess("Password changed successfully.")
                 else:
@@ -377,10 +368,10 @@ def main():
 
             elif args[0] == "rooms":
 
-                cursor = sqlite3.connect(DB_PATH).cursor()
-                rooms = cursor.execute("SELECT id, description FROM rooms").fetchall()
-                cursor.connection.commit()
-                cursor.connection.close()
+                connection = sqlite3.connect(DB_PATH)
+                rooms = connection.execute("SELECT id, description FROM rooms").fetchall()
+                connection.commit()
+                connection.close()
 
                 if rooms:
                     displaysuccess("Rooms found:")
@@ -400,14 +391,14 @@ def main():
                 end = args[4]
                 usage = args[5]
 
-                cursor = sqlite3.connect(DB_PATH).cursor()
+                connection = sqlite3.connect(DB_PATH)
 
                 params = []
                 if room_ids[0] != '*':
-                    room_ids = [room for room in room_ids if cursor.execute("SELECT id FROM rooms WHERE id=?", [room]).fetchone() is not None or displaywarning(f"Room '{room}' does not exist and is skipped.") and (command_notice := True)]
+                    room_ids = [room for room in room_ids if connection.execute("SELECT id FROM rooms WHERE id=?", [room]).fetchone() is not None or displaywarning(f"Room '{room}' does not exist and is skipped.") and (command_notice := True)]
                     params.extend(room_ids)
                 if user_ids[0] != '*':
-                    user_ids = [user for user in user_ids if cursor.execute("SELECT username FROM users WHERE username=?", [user]).fetchone() is not None or displaywarning(f"User '{user}' does not exist and is skipped.") and (command_notice := True)]
+                    user_ids = [user for user in user_ids if connection.execute("SELECT username FROM users WHERE username=?", [user]).fetchone() is not None or displaywarning(f"User '{user}' does not exist and is skipped.") and (command_notice := True)]
                     params.extend(user_ids)
                 now = datetime.now().strftime('%Y-%m-%d %H:%M')
                 if start != '*':
@@ -424,15 +415,15 @@ def main():
                     params.append(end)
                 params.append(usage)
 
-                if (start == '*' or cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL", [start]).fetchone()[0] == 1) and (end == '*' or cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL", [end]).fetchone()[0] == 1):
-                    if start == '*' or end == '*' or cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (start, end)).fetchone()[0] == "-":
+                if (start == '*' or connection.execute("SELECT strftime('%F %R', ?) IS NOT NULL", [start]).fetchone()[0] == 1) and (end == '*' or connection.execute("SELECT strftime('%F %R', ?) IS NOT NULL", [end]).fetchone()[0] == 1):
+                    if start == '*' or end == '*' or connection.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (start, end)).fetchone()[0] == "-":
                         if regex_match(usage) is not None:
 
-                            cursor.connection.create_function("regex", 2, regex_match)
+                            connection.create_function("regex", 2, regex_match)
 
                             query = f"SELECT * FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"} AND {"substr(timediff(?, end),1,1) = '-'" if start != '*' else "TRUE"} AND {"substr(timediff(start, ?),1,1) = '-'" if end != '*' else "TRUE"} AND regex(?, usage)"
-                
-                            bookings = cursor.execute(query, params).fetchall()
+
+                            bookings = connection.execute(query, params).fetchall()
 
                             print() if command_notice else None # Print a newline if there was a in-command notice
 
@@ -453,29 +444,29 @@ def main():
                 else:
                     displayerror("Invalid time format. Please use 'YYYY-MM-DD HH:MM' or 'now'.")
 
-                cursor.connection.commit()
-                cursor.connection.close()
+                connection.commit()
+                connection.close()
 
             elif args[0] == "show":
 
                 booking_ids = args[1].split(',')
                 bookings = []
 
-                cursor = sqlite3.connect(DB_PATH).cursor()
+                connection = sqlite3.connect(DB_PATH)
 
                 if booking_ids[0] == '*':
-                    bookings = cursor.execute("SELECT * FROM bookings").fetchall()
+                    bookings = connection.execute("SELECT * FROM bookings").fetchall()
                 else:
                     for booking_id in booking_ids:
-                        booking = cursor.execute("SELECT * FROM bookings WHERE id=?", [booking_id]).fetchone()
+                        booking = connection.execute("SELECT * FROM bookings WHERE id=?", [booking_id]).fetchone()
                         if booking is None:
                             displaywarning(f"Booking ID '{booking_id}' does not exist and is skipped.")
                             command_notice = True
                             continue
                         bookings.append(booking)
 
-                cursor.connection.commit()
-                cursor.connection.close()
+                connection.commit()
+                connection.close()
 
                 print() if command_notice else None # Print a newline if there was a in-command notice
 
@@ -497,9 +488,10 @@ def main():
                 usage = args[4]
                 actual_room_ids = []
 
-                cursor = sqlite3.connect(DB_PATH).cursor()
+                connection = sqlite3.connect(DB_PATH)
+                connection.execute("BEGIN EXCLUSIVE")
 
-                if start == 'now' or cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (start, datetime.now().strftime('%Y-%m-%d %H:%M'))).fetchone()[0] != "-":
+                if start == 'now' or connection.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (start, datetime.now().strftime('%Y-%m-%d %H:%M'))).fetchone()[0] != "-":
 
                     now = datetime.now().strftime('%Y-%m-%d %H:%M')
                     if start == 'now':
@@ -511,17 +503,17 @@ def main():
                         displayinfo(f"Using current time {end} as end time.")
                         command_notice = True
 
-                    if cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL AND strftime('%F %R', ?) IS NOT NULL", (start, end)).fetchone()[0] == 1:
-                        if cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (start, end)).fetchone()[0] == "-":
+                    if connection.execute("SELECT strftime('%F %R', ?) IS NOT NULL AND strftime('%F %R', ?) IS NOT NULL", (start, end)).fetchone()[0] == 1:
+                        if connection.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (start, end)).fetchone()[0] == "-":
                             if len(usage) > 0:
 
                                 for room_id in room_ids:
-                                    if cursor.execute("SELECT id FROM rooms WHERE id=?", [room_id]).fetchone() is None:
+                                    if connection.execute("SELECT id FROM rooms WHERE id=?", [room_id]).fetchone() is None:
                                         displaywarning(f"Room '{room_id}' does not exist and is skipped.")
                                         command_notice = True
                                         continue
 
-                                    booked = cursor.execute(f"SELECT id FROM bookings WHERE roomID = ? AND substr(timediff(?, end),1,1) = '-' AND substr(timediff(start, ?),1,1) = '-'", (room_id, start, end)).fetchone()
+                                    booked = connection.execute(f"SELECT id FROM bookings WHERE roomID = ? AND substr(timediff(?, end),1,1) = '-' AND substr(timediff(start, ?),1,1) = '-'", (room_id, start, end)).fetchone()
 
                                     if booked is not None:
                                         displaywarning(f"Time slot is already booked (Booking ID: {booked[0]}) for room {room_id} and is skipped.")
@@ -529,7 +521,7 @@ def main():
                                         continue
 
                                     actual_room_ids.append(room_id)
-                                    cursor.execute("INSERT INTO bookings (roomID, username, start, end, usage) VALUES (?, ?, strftime('%F %R', ?), strftime('%F %R', ?), ?)", (room_id, currentuser, start, end, usage))
+                                    connection.execute("INSERT INTO bookings (roomID, username, start, end, usage) VALUES (?, ?, strftime('%F %R', ?), strftime('%F %R', ?), ?)", (room_id, currentuser, start, end, usage))
 
                                 print() if command_notice else None # Print a newline if there was a in-command notice
 
@@ -554,8 +546,8 @@ def main():
                 else:
                     displayerror("Start time cannot be in the past. Please use a future time or 'now'.")
 
-                cursor.connection.commit()
-                cursor.connection.close()
+                connection.commit()
+                connection.close()
 
             elif args[0] == "modify":
 
@@ -564,11 +556,12 @@ def main():
                 actual_booking_ids = []
 
                 if len(usage) != 0:
-                    
-                    cursor = sqlite3.connect(DB_PATH).cursor()
+
+                    connection = sqlite3.connect(DB_PATH)
+                    # No exclusive lock as even if the user is deleted or the password is changed on the fly, data integrity and consistency are still maintained, without any errors occurring.
 
                     for booking_id in booking_ids:
-                        booking = cursor.execute("SELECT username, start FROM bookings WHERE id=?", [booking_id]).fetchone()
+                        booking = connection.execute("SELECT username, start FROM bookings WHERE id=?", [booking_id]).fetchone()
                         if booking is None:
                             displaywarning(f"Booking ID '{booking_id}' does not exist and is skipped.")
                             command_notice = True
@@ -577,12 +570,12 @@ def main():
                             displaywarning(f"You can only modify your own bookings as a standard user. Booking ID '{booking_id}' is skipped.")
                             command_notice = True
                             continue
-                        if not isadmin and cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (booking[1], datetime.now().strftime('%Y-%m-%d %H:%M'))).fetchone()[0] == "-":
+                        if not isadmin and connection.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (booking[1], datetime.now().strftime('%Y-%m-%d %H:%M'))).fetchone()[0] == "-":
                             displaywarning(f"Booking ID '{booking_id}' is in the past and cannot be modified by a standard user.")
                             command_notice = True
                             continue
                         actual_booking_ids.append(booking_id)
-                        cursor.execute("UPDATE bookings SET usage=? WHERE id=?", (usage, booking_id))
+                        connection.execute("UPDATE bookings SET usage=? WHERE id=?", (usage, booking_id))
 
                     print() if command_notice else None # Print a newline if there was a in-command notice
 
@@ -596,8 +589,8 @@ def main():
                     else:
                         displayerror("No bookings were modified. Please check the booking IDs.")
 
-                    cursor.connection.commit()
-                    cursor.connection.close()
+                    connection.commit()
+                    connection.close()
 
                 else:
                     displayerror("Usage cannot be empty. Please provide a description of the booking.")
@@ -607,10 +600,11 @@ def main():
                 booking_ids = args[1].split(',')
                 actual_booking_ids = []
 
-                cursor = sqlite3.connect(DB_PATH).cursor()
+                connection = sqlite3.connect(DB_PATH)
+                # No exclusive lock as even if the user is deleted or the password is changed on the fly, data integrity and consistency are still maintained, without any errors occurring.
 
                 for booking_id in booking_ids:
-                    booking = cursor.execute("SELECT username, start FROM bookings WHERE id=?", [booking_id]).fetchone()
+                    booking = connection.execute("SELECT username, start FROM bookings WHERE id=?", [booking_id]).fetchone()
                     if booking is None:
                         displaywarning(f"Booking ID '{booking_id}' does not exist and is skipped.")
                         command_notice = True
@@ -619,15 +613,15 @@ def main():
                         displaywarning(f"You can only cancel your own bookings as a standard user. Booking ID '{booking_id}' is skipped.")
                         command_notice = True
                         continue
-                    if not isadmin and cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (booking[1], datetime.now().strftime('%Y-%m-%d %H:%M'))).fetchone()[0] == "-":
+                    if not isadmin and connection.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (booking[1], datetime.now().strftime('%Y-%m-%d %H:%M'))).fetchone()[0] == "-":
                         displaywarning(f"Booking ID '{booking_id}' is in the past and cannot be cancelled by a standard user.")
                         command_notice = True
                         continue
                     actual_booking_ids.append(booking_id)
-                    cursor.execute("DELETE FROM bookings WHERE id=?", [booking_id])
+                    connection.execute("DELETE FROM bookings WHERE id=?", [booking_id])
 
-                cursor.connection.commit()
-                cursor.connection.close()
+                connection.commit()
+                connection.close()
 
                 print() if command_notice else None # Print a newline if there was a in-command notice
 
@@ -653,16 +647,17 @@ def main():
 
                     actual_booking_ids = []
 
-                    cursor = sqlite3.connect(DB_PATH).cursor()
+                    connection = sqlite3.connect(DB_PATH)
+                    # No exclusive lock as even if the user is deleted or the password is changed on the fly, data integrity and consistency are still maintained, without any errors occurring.
 
-                    if isadmin or start == 'now' or cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (start, datetime.now().strftime('%Y-%m-%d %H:%M'))).fetchone()[0] != "-":
+                    if isadmin or start == 'now' or connection.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (start, datetime.now().strftime('%Y-%m-%d %H:%M'))).fetchone()[0] != "-":
 
                         params = []
                         if room_ids[0] != '*':
-                            room_ids = [room for room in room_ids if cursor.execute("SELECT id FROM rooms WHERE id=?", [room]).fetchone() is not None or displaywarning(f"Room '{room}' does not exist and is skipped.") and (command_notice := True)]
+                            room_ids = [room for room in room_ids if connection.execute("SELECT id FROM rooms WHERE id=?", [room]).fetchone() is not None or displaywarning(f"Room '{room}' does not exist and is skipped.") and (command_notice := True)]
                             params.extend(room_ids)
                         if user_ids[0] != '*':
-                            user_ids = [user for user in user_ids if cursor.execute("SELECT username FROM users WHERE username=?", [user]).fetchone() is not None or displaywarning(f"User '{user}' does not exist and is skipped.") and (command_notice := True)]
+                            user_ids = [user for user in user_ids if connection.execute("SELECT username FROM users WHERE username=?", [user]).fetchone() is not None or displaywarning(f"User '{user}' does not exist and is skipped.") and (command_notice := True)]
                             params.extend(user_ids)
                         now = datetime.now().strftime('%Y-%m-%d %H:%M')
                         if start != '*':
@@ -679,15 +674,15 @@ def main():
                             params.append(end)
                         params.append(usage)
 
-                        if (start == '*' or cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL", [start]).fetchone()[0] == 1) and (end == '*' or cursor.execute("SELECT strftime('%F %R', ?) IS NOT NULL", [end]).fetchone()[0] == 1):
-                            if start == '*' or end == '*' or cursor.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (start, end)).fetchone()[0] == "-":
+                        if (start == '*' or connection.execute("SELECT strftime('%F %R', ?) IS NOT NULL", [start]).fetchone()[0] == 1) and (end == '*' or connection.execute("SELECT strftime('%F %R', ?) IS NOT NULL", [end]).fetchone()[0] == 1):
+                            if start == '*' or end == '*' or connection.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (start, end)).fetchone()[0] == "-":
                                 if regex_match(usage) is not None:
 
-                                    cursor.connection.create_function("regex", 2, regex_match)
+                                    connection.create_function("regex", 2, regex_match)
 
                                     query = f"SELECT id, username FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"} AND {"substr(timediff(?, end),1,1) = '-'" if start != '*' else "TRUE"} AND {"substr(timediff(start, ?),1,1) = '-'" if end != '*' else "TRUE"} AND regex(?, usage)"
 
-                                    bookings = cursor.execute(query, params).fetchall()
+                                    bookings = connection.execute(query, params).fetchall()
 
                                     if bookings:
                                         for booking in bookings:
@@ -696,8 +691,8 @@ def main():
                                                 command_notice = True
                                                 continue
                                             actual_booking_ids.append(str(booking[0]))
-                                            cursor.execute("DELETE FROM bookings WHERE id=?", [booking[0]])
-                                    
+                                            connection.execute("DELETE FROM bookings WHERE id=?", [booking[0]])
+
                                     print() if command_notice else None # Print a newline if there was a in-command notice
 
                                     if actual_booking_ids:
@@ -720,8 +715,8 @@ def main():
                     else:
                         displayerror("Clearing past bookings is not allowed for a standard user. Please use a future time or 'now' as start time.")
 
-                    cursor.connection.commit()
-                    cursor.connection.close()
+                    connection.commit()
+                    connection.close()
 
                 else:
                     displayerror("Clearing bookings cancelled.")
@@ -729,31 +724,36 @@ def main():
             elif isadmin:
 
                 if args[0] == "reg":
-                    
-                    cursor = sqlite3.connect(DB_PATH).cursor()
 
-                    if cursor.execute("SELECT username FROM users WHERE username=?", [args[1]]).fetchone() is None:
-                        pwhash = sha3_512(getpass("Password: ").encode()).digest()
-                        cursor.execute("INSERT INTO users (username, pwhash) VALUES (?, ?)", (args[1], pwhash))
-                        displaysuccess(f"User '{args[1]}' registered successfully.")
-                    else:
-                        displayerror(f"User '{args[1]}' already exists. Please choose a different username.")
+                    connection = sqlite3.connect(DB_PATH)
+                    # No exclusive lock as even if the user is deleted or the password is changed on the fly, data integrity and consistency are still maintained, without any errors occurring.
 
-                    cursor.connection.commit()
-                    cursor.connection.close()                
+                    if connection.execute("SELECT username FROM users WHERE username=?", [args[1]]).fetchone() is not None:
+                        displayinfo(f"User '{args[1]}' already exists. Changing password.")
+                        command_notice = True
+
+                    print() if command_notice else None # Print a newline if there was a in-command notice
+
+                    pwhash = sha3_512(getpass("Password: ").encode()).digest()
+                    connection.execute("INSERT OR REPLACE users (username, pwhash) VALUES (?, ?)", (args[1], pwhash))
+                    displaysuccess(f"User '{args[1]}' registered successfully.")
+
+                    connection.commit()
+                    connection.close()
 
                 elif args[0] == "dereg":
 
-                    if input(f"Are you sure you want to deregister the users? Their bookings will be as well cancelled. Enter 'yes' to confirm: ").lower() == "yes":\
-                    
+                    if input(f"Are you sure you want to deregister the users? Their bookings will be as well cancelled. Enter 'yes' to confirm: ").lower() == "yes":
+
                         usernames = args[1].split(',')
                         actual_usernames = []
 
-                        cursor = sqlite3.connect(DB_PATH).cursor()
-                        cursor.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
+                        connection = sqlite3.connect(DB_PATH)
+                        connection.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
+                        # No exclusive lock as even if the user is deleted or the password is changed on the fly, data integrity and consistency are still maintained, without any errors occurring.
 
                         for username in usernames:
-                            if cursor.execute("SELECT username FROM users WHERE username=?", [username]).fetchone() is None:
+                            if connection .execute("SELECT username FROM users WHERE username=?", [username]).fetchone() is None:
                                 displaywarning(f"User '{username}' does not exist and is skipped.")
                                 command_notice = True
                                 continue
@@ -762,11 +762,11 @@ def main():
                                 command_notice = True
                                 continue
                             actual_usernames.append(username)
-                            cursor.execute("DELETE FROM bookings WHERE username=?", [username])
-                            cursor.execute("DELETE FROM users WHERE username=?", [username])
-                            
-                        cursor.connection.commit()
-                        cursor.connection.close()
+                            connection.execute("DELETE FROM bookings WHERE username=?", [username])
+                            connection.execute("DELETE FROM users WHERE username=?", [username])
+
+                        connection.commit()
+                        connection.close()
 
                         print() if command_notice else None # Print a newline if there was a in-command notice
 
@@ -782,32 +782,13 @@ def main():
 
                     else:
                         displayerror("Deregistration cancelled.")
-                
-                elif args[0] == "cpx":
-
-                    cursor = sqlite3.connect(DB_PATH).cursor()
-
-                    if cursor.execute("SELECT username FROM users WHERE username=?", [args[1]]).fetchone() is not None:
-                        new_password = getpass("New Password: ")
-                        confirm_password = getpass("Confirm New Password: ")
-                        if new_password == confirm_password:
-                            new_pwhash = sha3_512(new_password.encode()).digest()
-                            cursor.execute("UPDATE users SET pwhash=? WHERE username=?", (new_pwhash, args[1]))
-                            displaysuccess(f"Password for user '{args[1]}' changed successfully.")
-                        else:    
-                            displayerror("Passwords do not match. Please try again.")
-                    else:
-                        displayerror(f"User '{args[1]}' does not exist.")
-                    
-                    cursor.connection.commit()
-                    cursor.connection.close()
 
                 elif args[0] == "users":
 
-                    cursor = sqlite3.connect(DB_PATH).cursor()
-                    users = cursor.execute("SELECT * FROM users").fetchall()
-                    cursor.connection.commit()
-                    cursor.connection.close()
+                    connection = sqlite3.connect(DB_PATH)
+                    users = connection.execute("SELECT * FROM users").fetchall()
+                    connection.commit()
+                    connection.close()
 
                     if users:
                         displaysuccess("Users found:")
@@ -825,18 +806,19 @@ def main():
                     description = args[2]
                     actual_room_ids = []
 
-                    cursor = sqlite3.connect(DB_PATH).cursor()
-                    
-                    for room_id in room_ids:
-                        if cursor.execute("SELECT id FROM rooms WHERE id=?", [room_id]).fetchone() is not None:
-                            displaywarning(f"Room '{room_id}' already exists and is skipped.")
-                            command_notice = True
-                            continue
-                        actual_room_ids.append(room_id)
-                        cursor.execute("INSERT INTO rooms (id, description) VALUES (?, ?)", [room_id, description])
+                    connection = sqlite3.connect(DB_PATH)
+                    # No exclusive lock as even if the user is deleted or the password is changed on the fly, data integrity and consistency are still maintained, without any errors occurring.
 
-                    cursor.connection.commit()
-                    cursor.connection.close()
+                    for room_id in room_ids:
+                        if connection.execute("SELECT id FROM rooms WHERE id=?", [room_id]).fetchone() is not None:
+                            displayinfo(f"Room '{room_id}' already exists, changing description.")
+                            command_notice = True
+    
+                        actual_room_ids.append(room_id)
+                        connection.execute("INSERT OR REPLACE INTO rooms (id, description) VALUES (?, ?)", [room_id, description])
+
+                    connection.commit()
+                    connection.close()
 
                     print() if command_notice else None # Print a newline if there was a in-command notice
 
@@ -850,37 +832,6 @@ def main():
                     else:
                         displayerror("No rooms were created.")
 
-                elif args[0] == "refurnish":
-
-                    room_ids = args[1].split(',')
-                    description = args[2]
-                    actual_room_ids = []
-
-                    cursor = sqlite3.connect(DB_PATH).cursor()
-
-                    for room_id in room_ids:
-                        if cursor.execute("SELECT id FROM rooms WHERE id=?", [room_id]).fetchone() is None:
-                            displaywarning(f"Room '{room_id}' does not exist and is skipped.")
-                            command_notice = True
-                            continue
-                        actual_room_ids.append(room_id)
-                        cursor.execute("UPDATE rooms SET description=? WHERE id=?", [description, room_id])
-
-                    cursor.connection.commit()
-                    cursor.connection.close()
-
-                    print() if command_notice else None # Print a newline if there was a in-command notice
-
-                    if actual_room_ids:
-                        displaysuccess(f"The following rooms are updated successfully:")
-                        display_table(
-                            headers=["Room ID"],
-                            widths=[10],
-                            *[[room_id] for room_id in actual_room_ids]
-                        )
-                    else:
-                        displayerror("No rooms were updated.")
-
                 elif args[0] == "destroy":
 
                     if input(f"Are you sure you want to delete the rooms? Their bookings will be as well cancelled. Enter 'yes' to confirm: ").lower() == "yes":
@@ -888,20 +839,21 @@ def main():
                         room_ids = args[1].split(',')
                         actual_room_ids = []
 
-                        cursor = sqlite3.connect(DB_PATH).cursor()
-                        cursor.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
+                        connection = sqlite3.connect(DB_PATH)
+                        connection.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
+                        # No exclusive lock as even if the user is deleted or the password is changed on the fly, data integrity and consistency are still maintained, without any errors occurring.
 
                         for room_id in room_ids:
-                            if cursor.execute("SELECT id FROM rooms WHERE id=?", [room_id]).fetchone() is None:
+                            if connection.execute("SELECT id FROM rooms WHERE id=?", [room_id]).fetchone() is None:
                                 displaywarning(f"Room '{room_id}' does not exist and is skipped.")
                                 command_notice = True
                                 continue
                             actual_room_ids.append(room_id)
-                            cursor.execute("DELETE FROM bookings WHERE roomID=?", [room_id])
-                            cursor.execute("DELETE FROM rooms WHERE id=?", [room_id])
+                            connection.execute("DELETE FROM bookings WHERE roomID=?", [room_id])
+                            connection.execute("DELETE FROM rooms WHERE id=?", [room_id])
 
-                        cursor.connection.commit()
-                        cursor.connection.close()
+                        connection.commit()
+                        connection.close()
 
                         print() if command_notice else None # Print a newline if there was a in-command notice
 
@@ -920,9 +872,10 @@ def main():
                 
                 elif args[0] == "sql":
 
-                    cursor = sqlite3.connect(DB_PATH).cursor()
-                    cursor.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
-
+                    connection = sqlite3.connect(DB_PATH)
+                    connection.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
+                    
+                    cursor = connection.cursor()
                     try:
                         result = cursor.execute(args[1]).fetchall()
                     except sqlite3.Error as e:
@@ -935,8 +888,8 @@ def main():
                             *result
                         )
 
-                    cursor.connection.commit()
-                    cursor.connection.close()
+                    connection.commit()
+                    connection.close()
 
         print() # Print a newline for better readability
 
