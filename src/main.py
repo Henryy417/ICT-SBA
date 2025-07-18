@@ -489,6 +489,7 @@ def main():
                 actual_room_ids = []
 
                 connection = sqlite3.connect(DB_PATH)
+                connection.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
                 connection.execute("BEGIN EXCLUSIVE")
 
                 if start == 'now' or connection.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (start, datetime.now().strftime('%Y-%m-%d %H:%M'))).fetchone()[0] != "-":
