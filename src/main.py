@@ -21,6 +21,11 @@ def display_table(headers: list[str], widths: list[int], *rows: list):
         line_buffer += header.ljust(width)
     print(line_buffer)
 
+    line_buffer = ""
+    for width in widths:
+        line_buffer += '---'.ljust(width)
+    print(line_buffer)
+
     for row in rows:
         line_buffer = ""
         for item, width in zip(row, widths):
@@ -54,8 +59,8 @@ def main():
             return False
 
     def is_in_time_interval(interval_start: str, interval_end: str, target_start: str, target_end: str) -> bool: # End-exclusive & no input validation
-        interval_start_dt = datetime.strptime(interval_start, '%Y-%m-%d %H:%M')
-        interval_end_dt = datetime.strptime(interval_end, '%Y-%m-%d %H:%M')
+        interval_start_dt = datetime.strptime(interval_start, '%Y-%m-%d %H:%M') if interval_start != '*' else datetime.min
+        interval_end_dt = datetime.strptime(interval_end, '%Y-%m-%d %H:%M') if interval_end != '*' else datetime.max
         target_start_dt = datetime.strptime(target_start, '%Y-%m-%d %H:%M')
         target_end_dt = datetime.strptime(target_end, '%Y-%m-%d %H:%M')
         return not(interval_start_dt >= target_end_dt or interval_end_dt <= target_start_dt)
@@ -306,8 +311,8 @@ def main():
             print() # Print a newline for better readability
 
             display_table(
-                headers=["Command", "Description"],
-                widths=[15, 0],
+                ["Command", "Description"],
+                [15, 0],
                 *[(cmd, details['help']) for cmd, details in available_commands.items()]
             )
 
@@ -393,8 +398,8 @@ def main():
                 if rooms:
                     displaysuccess("Rooms found:")
                     display_table(
-                        headers=["ID", "Description"],
-                        widths=[10, 0],
+                        ["ID", "Description"],
+                        [10, 0],
                         *rooms
                     )
                 else:
@@ -423,13 +428,13 @@ def main():
                         start = now
                         displayinfo(f"Using current time {start} as start time.")
                         command_notice = True
-                    params.append(start)
+                params.append(start)
                 if end != '*':
                     if end == 'now':
                         end = now
                         displayinfo(f"Using current time {end} as end time.")
                         command_notice = True
-                    params.append(end)
+                params.append(end)
                 params.append(usage)
 
                 if is_valid_time_interval(start, end, allow_wildcard=True):
@@ -447,8 +452,8 @@ def main():
                         if bookings:
                             displaysuccess("Bookings found:")
                             display_table(
-                                headers=["Booking ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
-                                widths=[10, 10, 20, 20, 20, 0],
+                                ["Booking ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
+                                [10, 10, 20, 20, 20, 0],
                                 *bookings
                             )
                         else:
@@ -488,8 +493,8 @@ def main():
                 if bookings:
                     displaysuccess("Bookings found:")
                     display_table(
-                        headers=["Booking ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
-                        widths=[10, 10, 20, 20, 20, 0],
+                        ["Booking ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
+                        [10, 10, 20, 20, 20, 0],
                         *bookings
                     )
                 else:
@@ -532,7 +537,7 @@ def main():
                                 booked = connection.execute(f"SELECT id FROM bookings WHERE roomID = ? AND in_interval(?, ?, start, end)", (room_id, start, end)).fetchone()
 
                                 if booked is not None:
-                                    displaywarning(f"Time slot is already booked (Booking ID: {booked[0]}) for room {room_id} and is skipped.")
+                                    displaywarning(f"Time slot is occupied (Booking ID: {booked[0]}) for room {room_id} and is skipped.")
                                     command_notice = True
                                     continue
 
@@ -544,8 +549,8 @@ def main():
                             if actual_room_ids:
                                 displaysuccess(f"Booking(s) for the following room(s) created successfully:")
                                 display_table(
-                                    headers=["Room ID"],
-                                    widths=[10],
+                                    ["Room ID"],
+                                    [10],
                                     *[[room_id] for room_id in actual_room_ids]
                                 )
                             else:
@@ -594,8 +599,8 @@ def main():
                     if actual_booking_ids:
                         displaysuccess(f"The following bookings are modified successfully:")
                         display_table(
-                            headers=["Booking ID"],
-                            widths=[10],
+                            ["Booking ID"],
+                            [10],
                             *[[booking_id] for booking_id in actual_booking_ids]
                         )
                     else:
@@ -640,8 +645,8 @@ def main():
                 if actual_booking_ids:
                     displaysuccess(f"The following bookings are cancelled successfully:")
                     display_table(
-                        headers=["Booking ID"],
-                        widths=[10],
+                        ["Booking ID"],
+                        [10],
                         *[[booking_id] for booking_id in actual_booking_ids]
                     )
                 else:
@@ -709,8 +714,8 @@ def main():
                                 if actual_booking_ids:
                                     displaysuccess(f"The following bookings are cleared successfully:")
                                     display_table(
-                                        headers=["Booking ID"],
-                                        widths=[10],
+                                        ["Booking ID"],
+                                        [10],
                                         *[[booking_id] for booking_id in actual_booking_ids]
                                     )
                                 else:
@@ -781,8 +786,8 @@ def main():
                         if actual_usernames:
                             displaysuccess(f"The following users are deregistered successfully:")
                             display_table(
-                                headers=["Username"],
-                                widths=[20],
+                                ["Username"],
+                                [20],
                                 *[[username] for username in actual_usernames]
                             )
                         else:
@@ -801,8 +806,8 @@ def main():
                     if users:
                         displaysuccess("Users found:")
                         display_table(
-                            headers=["Admin", "Username"],
-                            widths=[5, 0],
+                            ["Admin", "Username"],
+                            [5, 0],
                             *[("Yes" if user[1] else "No", user[0]) for user in users]
                         )
                     else:
@@ -833,8 +838,8 @@ def main():
                     if actual_room_ids:
                         displaysuccess(f"The following rooms are created successfully:")
                         display_table(
-                            headers=["Room ID"],
-                            widths=[10],
+                            ["Room ID"],
+                            [10],
                             *[[room_id] for room_id in actual_room_ids]
                         )
                     else:
@@ -868,8 +873,8 @@ def main():
                         if actual_room_ids:
                             displaysuccess(f"The following rooms are deleted successfully:")
                             display_table(
-                                headers=["Room ID"],
-                                widths=[10],
+                                ["Room ID"],
+                                [10],
                                 *[[room_id] for room_id in actual_room_ids]
                             )
                         else:
@@ -891,8 +896,8 @@ def main():
                     else:
                         displaysuccess("SQL query executed successfully:")
                         display_table(
-                            headers=[description[0] for description in cursor.description],
-                            widths=[25 for _ in range(len(cursor.description))],
+                            [description[0] for description in cursor.description],
+                            [25 for _ in range(len(cursor.description))],
                             *result
                         )
 
