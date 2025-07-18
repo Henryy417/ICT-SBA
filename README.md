@@ -66,7 +66,7 @@ These are the currently available commands in Booker:
 
 ## Arguments & Formats
 - **csv**: Comma-separated values (e.g., `room1,room2`)
-- **time**: Format `YYYY-MM-DD HH:MM` or `now` (other unspecified formats may be supported by SQLite, but not guaranteed)
+- **time**: Format `YYYY-MM-DD HH:MM` or `now`
 - **text**: Free text without special formatting
 > Note: Some arguments accept a wildcard (`*`) for flexible matching.
 

@@ -15,7 +15,7 @@ def displaywarning(msg: str): # Warning Message: User may want to solve this to 
 def displayinfo(msg: str): # Information Message: User may want to know this but nothing is wrong nor actions needed
     print(f"\33[94m{msg}\33[0m")
 
-def display_table(headers: list, widths: list, *rows: list):
+def display_table(headers: list[str], widths: list[int], *rows: list):
     line_buffer = ""
     for header, width in zip(headers, widths):
         line_buffer += header.ljust(width)
@@ -43,7 +43,24 @@ def main():
             if not ('use_requirement' in details and (details['use_requirement'] == "admin" and not isadmin or details['use_requirement'] == "user" and currentuser is None)):
                 available_commands[cmd] = details
 
-    def regex_match(pattern: str, value: str = ""):
+    def is_valid_time_interval(start: str, end: str, allow_equal: bool = False, allow_wildcard = False) -> bool:
+        if allow_wildcard and (start == '*' or end == '*'):
+            return True
+        try:
+            start_dt = datetime.strptime(start, '%Y-%m-%d %H:%M')
+            end_dt = datetime.strptime(end, '%Y-%m-%d %H:%M')
+            return start_dt < end_dt if not allow_equal else start_dt <= end_dt
+        except ValueError:
+            return False
+
+    def is_in_time_interval(interval_start: str, interval_end: str, target_start: str, target_end: str) -> bool: # End-exclusive & no input validation
+        interval_start_dt = datetime.strptime(interval_start, '%Y-%m-%d %H:%M')
+        interval_end_dt = datetime.strptime(interval_end, '%Y-%m-%d %H:%M')
+        target_start_dt = datetime.strptime(target_start, '%Y-%m-%d %H:%M')
+        target_end_dt = datetime.strptime(target_end, '%Y-%m-%d %H:%M')
+        return not(interval_start_dt >= target_end_dt or interval_end_dt <= target_start_dt)
+        
+    def regex_match(pattern: str, value: str = "") -> bool | None:
         try:
             regex = regex_compile(pattern)
         except regex_error:
@@ -415,34 +432,32 @@ def main():
                     params.append(end)
                 params.append(usage)
 
-                if (start == '*' or connection.execute("SELECT strftime('%F %R', ?) IS NOT NULL", [start]).fetchone()[0] == 1) and (end == '*' or connection.execute("SELECT strftime('%F %R', ?) IS NOT NULL", [end]).fetchone()[0] == 1):
-                    if start == '*' or end == '*' or connection.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (start, end)).fetchone()[0] == "-":
-                        if regex_match(usage) is not None:
+                if is_valid_time_interval(start, end, allow_wildcard=True):
+                    if regex_match(usage) is not None:
 
-                            connection.create_function("regex", 2, regex_match)
+                        connection.create_function("in_interval", 4, is_in_time_interval)
+                        connection.create_function("regex", 2, regex_match)
+                        
+                        query = f"SELECT * FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"} AND in_interval(?, ?, start, end) AND regex(?, usage) ORDER BY strftime('%F %R', start), roomID"
 
-                            query = f"SELECT * FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"} AND {"substr(timediff(?, end),1,1) = '-'" if start != '*' else "TRUE"} AND {"substr(timediff(start, ?),1,1) = '-'" if end != '*' else "TRUE"} AND regex(?, usage) ORDER BY strftime('%F %R', start), roomID"
+                        bookings = connection.execute(query, params).fetchall()
 
-                            bookings = connection.execute(query, params).fetchall()
+                        print() if command_notice else None # Print a newline if there was a in-command notice
 
-                            print() if command_notice else None # Print a newline if there was a in-command notice
-
-                            if bookings:
-                                displaysuccess("Bookings found:")
-                                display_table(
-                                    headers=["Booking ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
-                                    widths=[10, 10, 20, 20, 20, 0],
-                                    *bookings
-                                )
-                            else:
-                                displaysuccess("No bookings found. The time slot is free.")
-
+                        if bookings:
+                            displaysuccess("Bookings found:")
+                            display_table(
+                                headers=["Booking ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
+                                widths=[10, 10, 20, 20, 20, 0],
+                                *bookings
+                            )
                         else:
-                            displayerror("Usage input is invalid. Please use a valid regular expression for usage filtering.")
+                            displaysuccess("No bookings found. The time slot is free.")
+
                     else:
-                        displayerror("Time input is invalid. The end time must be after the start time.")
+                        displayerror("Usage input is invalid. Please use a valid regular expression for usage filtering.")
                 else:
-                    displayerror("Invalid time format. Please use 'YYYY-MM-DD HH:MM' or 'now'.")
+                    displayerror("Invalid time input. Either the end time is not later than the start time, or the time format is incorrect. Refer to the manual for more information.")
 
                 connection.commit()
                 connection.close()
@@ -492,60 +507,56 @@ def main():
                 connection.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
                 connection.execute("BEGIN EXCLUSIVE")
 
-                if start == 'now' or connection.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (start, datetime.now().strftime('%Y-%m-%d %H:%M'))).fetchone()[0] != "-":
+                now = datetime.now().strftime('%Y-%m-%d %H:%M')
+                if start == 'now':
+                    start = now
+                    displayinfo(f"Using current time {start} as start time.")
+                    command_notice = True
+                if end == 'now':
+                    end = now
+                    displayinfo(f"Using current time {end} as end time.")
+                    command_notice = True
 
-                    now = datetime.now().strftime('%Y-%m-%d %H:%M')
-                    if start == 'now':
-                        start = now
-                        displayinfo(f"Using current time {start} as start time.")
-                        command_notice = True
-                    if end == 'now':
-                        end = now
-                        displayinfo(f"Using current time {end} as end time.")
-                        command_notice = True
+                if isadmin or is_valid_time_interval(now, start, allow_equal=True):
+                    if is_valid_time_interval(start, end):
+                        if len(usage) > 0:
 
-                    if connection.execute("SELECT strftime('%F %R', ?) IS NOT NULL AND strftime('%F %R', ?) IS NOT NULL", (start, end)).fetchone()[0] == 1:
-                        if connection.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (start, end)).fetchone()[0] == "-":
-                            if len(usage) > 0:
+                            connection.create_function("in_interval", 4, is_in_time_interval)
 
-                                for room_id in room_ids:
-                                    if connection.execute("SELECT id FROM rooms WHERE id=?", [room_id]).fetchone() is None:
-                                        displaywarning(f"Room '{room_id}' does not exist and is skipped.")
-                                        command_notice = True
-                                        continue
+                            for room_id in room_ids:
+                                if connection.execute("SELECT id FROM rooms WHERE id=?", [room_id]).fetchone() is None:
+                                    displaywarning(f"Room '{room_id}' does not exist and is skipped.")
+                                    command_notice = True
+                                    continue
 
-                                    booked = connection.execute(f"SELECT id FROM bookings WHERE roomID = ? AND substr(timediff(?, end),1,1) = '-' AND substr(timediff(start, ?),1,1) = '-'", (room_id, start, end)).fetchone()
+                                booked = connection.execute(f"SELECT id FROM bookings WHERE roomID = ? AND in_interval(?, ?, start, end)", (room_id, start, end)).fetchone()
 
-                                    if booked is not None:
-                                        displaywarning(f"Time slot is already booked (Booking ID: {booked[0]}) for room {room_id} and is skipped.")
-                                        command_notice = True
-                                        continue
+                                if booked is not None:
+                                    displaywarning(f"Time slot is already booked (Booking ID: {booked[0]}) for room {room_id} and is skipped.")
+                                    command_notice = True
+                                    continue
 
-                                    actual_room_ids.append(room_id)
-                                    connection.execute("INSERT INTO bookings (roomID, username, start, end, usage) VALUES (?, ?, strftime('%F %R', ?), strftime('%F %R', ?), ?)", (room_id, currentuser, start, end, usage))
+                                actual_room_ids.append(room_id)
+                                connection.execute("INSERT INTO bookings (roomID, username, start, end, usage) VALUES (?, ?, strftime('%F %R', ?), strftime('%F %R', ?), ?)", (room_id, currentuser, start, end, usage))
 
-                                print() if command_notice else None # Print a newline if there was a in-command notice
+                            print() if command_notice else None # Print a newline if there was a in-command notice
 
-                                if actual_room_ids:
-                                    displaysuccess(f"Booking(s) for the following room(s) created successfully:")
-                                    display_table(
-                                        headers=["Room ID"],
-                                        widths=[10],
-                                        *[[room_id] for room_id in actual_room_ids]
-                                    )
-
-                                else:
-                                    displayerror("No bookings were created. Please check the time slot and room IDs.")
-                            
+                            if actual_room_ids:
+                                displaysuccess(f"Booking(s) for the following room(s) created successfully:")
+                                display_table(
+                                    headers=["Room ID"],
+                                    widths=[10],
+                                    *[[room_id] for room_id in actual_room_ids]
+                                )
                             else:
-                                displayerror("Usage cannot be empty. Please provide a description of the booking.")
+                                displayerror("No bookings were created. Please check the time slot and room IDs.")
+                            
                         else:
-                            displayerror("Time input is invalid. The end time must be after the start time.")
+                            displayerror("Usage cannot be empty. Please provide a description of the booking.")
                     else:
-                        displayerror("Invalid time format. Please use 'YYYY-MM-DD HH:MM' or 'now'.")
-                
+                        displayerror("Invalid time input. Either the end time is not later than the start time, or the time format is incorrect. Refer to the manual for more information.")
                 else:
-                    displayerror("Start time cannot be in the past. Please use a future time or 'now'.")
+                    displayerror("Standard user cannot set start time in the past. Please use a future time or 'now'.")
 
                 connection.commit()
                 connection.close()
@@ -571,7 +582,7 @@ def main():
                             displaywarning(f"You can only modify your own bookings as a standard user. Booking ID '{booking_id}' is skipped.")
                             command_notice = True
                             continue
-                        if not isadmin and connection.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (booking[1], datetime.now().strftime('%Y-%m-%d %H:%M'))).fetchone()[0] == "-":
+                        if not (isadmin or is_valid_time_interval(datetime.now().strftime('%Y-%m-%d %H:%M'), booking[1], allow_equal=True)):
                             displaywarning(f"Booking ID '{booking_id}' is in the past and cannot be modified by a standard user.")
                             command_notice = True
                             continue
@@ -614,7 +625,7 @@ def main():
                         displaywarning(f"You can only cancel your own bookings as a standard user. Booking ID '{booking_id}' is skipped.")
                         command_notice = True
                         continue
-                    if not isadmin and connection.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (booking[1], datetime.now().strftime('%Y-%m-%d %H:%M'))).fetchone()[0] == "-":
+                    if not (isadmin or is_valid_time_interval(datetime.now().strftime('%Y-%m-%d %H:%M'), booking[1], allow_equal=True)):
                         displaywarning(f"Booking ID '{booking_id}' is in the past and cannot be cancelled by a standard user.")
                         command_notice = True
                         continue
@@ -651,68 +662,64 @@ def main():
                     connection = sqlite3.connect(DB_PATH)
                     # No exclusive lock as even if the user is deleted or the password is changed on the fly, data integrity and consistency are still maintained, without any errors occurring.
 
-                    if isadmin or start == 'now' or connection.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (start, datetime.now().strftime('%Y-%m-%d %H:%M'))).fetchone()[0] != "-":
+                    params = []
+                    if room_ids[0] != '*':
+                        room_ids = [room for room in room_ids if connection.execute("SELECT id FROM rooms WHERE id=?", [room]).fetchone() is not None or displaywarning(f"Room '{room}' does not exist and is skipped.") and (command_notice := True)]
+                        params.extend(room_ids)
+                    if user_ids[0] != '*':
+                        user_ids = [user for user in user_ids if connection.execute("SELECT username FROM users WHERE username=?", [user]).fetchone() is not None or displaywarning(f"User '{user}' does not exist and is skipped.") and (command_notice := True)]
+                        params.extend(user_ids)
+                    now = datetime.now().strftime('%Y-%m-%d %H:%M')
+                    if start != '*':
+                        if start == 'now':
+                            start = now
+                            displayinfo(f"Using current time {start} as start time.")
+                            command_notice = True
+                        params.append(start)
+                    if end != '*':
+                        if end == 'now':
+                            end = now
+                            displayinfo(f"Using current time {end} as end time.")
+                            command_notice = True
+                        params.append(end)
+                    params.append(usage)
 
-                        params = []
-                        if room_ids[0] != '*':
-                            room_ids = [room for room in room_ids if connection.execute("SELECT id FROM rooms WHERE id=?", [room]).fetchone() is not None or displaywarning(f"Room '{room}' does not exist and is skipped.") and (command_notice := True)]
-                            params.extend(room_ids)
-                        if user_ids[0] != '*':
-                            user_ids = [user for user in user_ids if connection.execute("SELECT username FROM users WHERE username=?", [user]).fetchone() is not None or displaywarning(f"User '{user}' does not exist and is skipped.") and (command_notice := True)]
-                            params.extend(user_ids)
-                        now = datetime.now().strftime('%Y-%m-%d %H:%M')
-                        if start != '*':
-                            if start == 'now':
-                                start = now
-                                displayinfo(f"Using current time {start} as start time.")
-                                command_notice = True
-                            params.append(start)
-                        if end != '*':
-                            if end == 'now':
-                                end = now
-                                displayinfo(f"Using current time {end} as end time.")
-                                command_notice = True
-                            params.append(end)
-                        params.append(usage)
+                    if isadmin or is_valid_time_interval(now, start, allow_equal=True):
+                        if is_valid_time_interval(start, end, allow_wildcard=True):
+                            if regex_match(usage) is not None:
 
-                        if (start == '*' or connection.execute("SELECT strftime('%F %R', ?) IS NOT NULL", [start]).fetchone()[0] == 1) and (end == '*' or connection.execute("SELECT strftime('%F %R', ?) IS NOT NULL", [end]).fetchone()[0] == 1):
-                            if start == '*' or end == '*' or connection.execute("SELECT substr(timediff(strftime('%F %R', ?), strftime('%F %R', ?)),1,1)", (start, end)).fetchone()[0] == "-":
-                                if regex_match(usage) is not None:
+                                connection.create_function("in_interval", 4, is_in_time_interval)
+                                connection.create_function("regex", 2, regex_match)
 
-                                    connection.create_function("regex", 2, regex_match)
+                                query = f"SELECT id, username FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"} AND {'in_interval(?, ?, start, end)' if start != '*' and end != '*' else "TRUE"} AND regex(?, usage)"
 
-                                    query = f"SELECT id, username FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"} AND {"substr(timediff(?, end),1,1) = '-'" if start != '*' else "TRUE"} AND {"substr(timediff(start, ?),1,1) = '-'" if end != '*' else "TRUE"} AND regex(?, usage)"
+                                bookings = connection.execute(query, params).fetchall()
 
-                                    bookings = connection.execute(query, params).fetchall()
+                                if bookings:
+                                    for booking in bookings:
+                                        if booking[1] != currentuser and not isadmin:
+                                            displaywarning(f"You can only clear your own bookings as a standard user. Booking ID '{booking[0]}' is skipped.")
+                                            command_notice = True
+                                            continue
+                                        actual_booking_ids.append(str(booking[0]))
+                                        connection.execute("DELETE FROM bookings WHERE id=?", [booking[0]])
 
-                                    if bookings:
-                                        for booking in bookings:
-                                            if booking[1] != currentuser and not isadmin:
-                                                displaywarning(f"You can only clear your own bookings as a standard user. Booking ID '{booking[0]}' is skipped.")
-                                                command_notice = True
-                                                continue
-                                            actual_booking_ids.append(str(booking[0]))
-                                            connection.execute("DELETE FROM bookings WHERE id=?", [booking[0]])
+                                print() if command_notice else None # Print a newline if there was a in-command notice
 
-                                    print() if command_notice else None # Print a newline if there was a in-command notice
-
-                                    if actual_booking_ids:
-                                        displaysuccess(f"The following bookings are cleared successfully:")
-                                        display_table(
-                                            headers=["Booking ID"],
-                                            widths=[10],
-                                            *[[booking_id] for booking_id in actual_booking_ids]
-                                        )
-                                    else:
-                                        displayerror("No bookings were cleared.")
-
+                                if actual_booking_ids:
+                                    displaysuccess(f"The following bookings are cleared successfully:")
+                                    display_table(
+                                        headers=["Booking ID"],
+                                        widths=[10],
+                                        *[[booking_id] for booking_id in actual_booking_ids]
+                                    )
                                 else:
-                                    displayerror("Usage input is invalid. Please use a valid regular expression for usage filtering.")
-                            else:
-                                displayerror("Time input is invalid. The end time must be after the start time.")
-                        else:
-                            displayerror("Invalid time format. Please use 'YYYY-MM-DD HH:MM' or 'now'.")
+                                    displayerror("No bookings were cleared.")
 
+                            else:
+                                displayerror("Usage input is invalid. Please use a valid regular expression for usage filtering.")
+                        else:
+                            displayerror("Invalid time input. Either the end time is not later than the start time, or the time format is incorrect. Refer to the manual for more information.")
                     else:
                         displayerror("Clearing past bookings is not allowed for a standard user. Please use a future time or 'now' as start time.")
 
