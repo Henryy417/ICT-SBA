@@ -58,7 +58,7 @@ def main():
         except ValueError:
             return False
 
-    def is_in_time_interval(interval_start: str, interval_end: str, target_start: str, target_end: str) -> bool: # End-exclusive & no input validation
+    def is_in_time_interval(interval_start: str, interval_end: str, target_start: str, target_end: str) -> bool: # NO INPUT VALIDATION! USE is_valid_time_interval() BEFORE THIS FUNCTION!
         interval_start_dt = datetime.strptime(interval_start, '%Y-%m-%d %H:%M') if interval_start != '*' else datetime.min
         interval_end_dt = datetime.strptime(interval_end, '%Y-%m-%d %H:%M') if interval_end != '*' else datetime.max
         target_start_dt = datetime.strptime(target_start, '%Y-%m-%d %H:%M')
@@ -192,7 +192,7 @@ def main():
     
     if connection.execute("SELECT type FROM sqlite_master WHERE type='table' AND name='users'").fetchone() is None:
 
-        # Create users table if it does not exist
+        # Create users table with prevention of external between-command transaction
         connection.execute(
             "CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, pwhash BLOB NOT NULL, isadmin BOOLEAN NOT NULL DEFAULT 0)"
         )
@@ -203,7 +203,7 @@ def main():
 
     if connection.execute("SELECT type FROM sqlite_master WHERE type='table' AND name='rooms'").fetchone() is None:
 
-       # Create rooms table if it does not exist
+       # Create rooms table with prevention of external between-command transaction
        connection.execute(
            "CREATE TABLE IF NOT EXISTS rooms (id TEXT PRIMARY KEY, description TEXT NOT NULL)"
        )
@@ -213,15 +213,15 @@ def main():
 
     if connection.execute("SELECT type FROM sqlite_master WHERE type='table' AND name='bookings'").fetchone() is None:
 
-        # Create bookings table if it does not exist
+        # Create bookings table with prevention of external between-command transaction
         connection.execute(
             "CREATE TABLE IF NOT EXISTS bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, roomID TEXT, username TEXT, start TEXT NOT NULL, end TEXT NOT NULL, usage TEXT NOT NULL, FOREIGN KEY (username) REFERENCES users(username), FOREIGN KEY (roomID) REFERENCES rooms(id))"
         )
 
-        # Create indexes
-        connection.execute("CREATE INDEX IF NOT EXISTS idx_bookings_room_user ON bookings (roomID, username)")
-        connection.execute("CREATE INDEX IF NOT EXISTS idx_bookings_user ON bookings (username)")
-        connection.execute("CREATE INDEX IF NOT EXISTS idx_bookings_time ON bookings (start)")
+        # Create indexes for bookings table to improve performance
+        connection.execute("CREATE INDEX IF NOT EXISTS idx_bookings_room_user ON bookings (roomID, username)") # Optimizing searches through both room and room&user
+        connection.execute("CREATE INDEX IF NOT EXISTS idx_bookings_user ON bookings (username)") # Optimizing searches through user
+        connection.execute("CREATE INDEX IF NOT EXISTS idx_bookings_time ON bookings (start)") # Optimizing searches through time
         connection.commit()
 
         displayinfo("Initialization: Created 'bookings' table.")
@@ -233,8 +233,9 @@ def main():
     ## Main loop ##
     while True:
 
+        # Parser #
+
         parser_notice = False
-        command_notice = False
 
         # Split input into arguments
         try:
@@ -289,7 +290,10 @@ def main():
 
         print() if parser_notice else None # Print a newline if there was a parser notice
 
-        ## Handle commands ##
+        # Command Handlers #
+
+        command_notice = False
+
         # Commands that can be used before login
         if args[0] == "help":
 
@@ -348,12 +352,12 @@ def main():
                 with open(Path(__file__).resolve().parent.parent/"LICENSE", "r") as license_file:
                     print(license_file.read())
             else:
-                displayerror("No license file is found. This may indicate illegal distribution.")
-                displayerror("This program is released under the MIT License by Chen Hang Tsz Henry. Please refer to the source code repository for more information.")
+                displayerror("No license file is found. This may indicate an illegal distribution.")
+                displayerror("This program is originally released under the MIT License by Chen Hang Tsz Henry. Please refer to the source code repository for more information.")
 
         elif args[0] == "cls":
 
-            sysexec("cls" if sysname == "nt" else "clear") # Microsoft time
+            sysexec("cls" if sysname == "nt" else "clear") # Compatible with older Windows without PowerShell
 
         elif args[0] == "login":
 
