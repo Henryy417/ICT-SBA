@@ -369,7 +369,7 @@ def main():
             elif args[0] == "rooms":
 
                 connection = sqlite3.connect(DB_PATH)
-                rooms = connection.execute("SELECT id, description FROM rooms").fetchall()
+                rooms = connection.execute("SELECT id, description FROM rooms ORDER BY id").fetchall()
                 connection.commit()
                 connection.close()
 
@@ -421,7 +421,7 @@ def main():
 
                             connection.create_function("regex", 2, regex_match)
 
-                            query = f"SELECT * FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"} AND {"substr(timediff(?, end),1,1) = '-'" if start != '*' else "TRUE"} AND {"substr(timediff(start, ?),1,1) = '-'" if end != '*' else "TRUE"} AND regex(?, usage)"
+                            query = f"SELECT * FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"} AND {"substr(timediff(?, end),1,1) = '-'" if start != '*' else "TRUE"} AND {"substr(timediff(start, ?),1,1) = '-'" if end != '*' else "TRUE"} AND regex(?, usage) ORDER BY strftime('%F %R', start), roomID"
 
                             bookings = connection.execute(query, params).fetchall()
 
@@ -787,7 +787,7 @@ def main():
                 elif args[0] == "users":
 
                     connection = sqlite3.connect(DB_PATH)
-                    users = connection.execute("SELECT * FROM users").fetchall()
+                    users = connection.execute("SELECT * FROM users ORDER BY username").fetchall()
                     connection.commit()
                     connection.close()
 
