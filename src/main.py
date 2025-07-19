@@ -317,7 +317,7 @@ def main():
             display_table(
                 ["Command", "Description"],
                 [15, 0],
-                *[(cmd, details['help']) for cmd, details in available_commands.items()]
+                *[[cmd, details['help']] for cmd, details in available_commands.items()]
             )
 
         elif args[0] == "man":
@@ -812,7 +812,7 @@ def main():
                         display_table(
                             ["Admin", "Username"],
                             [5, 0],
-                            *[("Yes" if user[1] else "No", user[0]) for user in users]
+                            *[["Yes" if user[1] else "No", user[0]] for user in users]
                         )
                     else:
                         displaywarning("No users found. Please register users using the 'reg' command.")

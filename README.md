@@ -43,12 +43,10 @@ These are the currently available commands in Booker:
 ### Admin Commands (after login)
 | Command     | Description                                 |
 |-------------|---------------------------------------------|
-| reg         | Register a new user                         |
+| reg         | Register a new user or update password      |
 | dereg       | Deregister users                            |
-| cpx         | Change password for a user                  |
 | users       | List all users                              |
-| build       | Create new rooms                            |
-| refurnish   | Update room descriptions                    |
+| build       | Create new rooms or update descriptions     |
 | destroy     | Delete rooms                                |
 | sql         | Execute raw SQL query                       |
 
