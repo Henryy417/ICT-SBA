@@ -1,3 +1,7 @@
+## TODO ##
+# - Check input validity in parser
+# - Add named arguments support for commands
+
 # Global imports
 from pathlib import Path
 from datetime import datetime
@@ -35,37 +39,39 @@ def display_table(headers: list[str], widths: list[int], *rows: list):
 def main():
     ## Initialization ##
     # Functional imports
-    from shlex import split, join
-    from getpass import getpass
-    from hashlib import sha3_512
+    from shlex import split as shellsplit, join as shelljoin
+    from getpass import getpass as inputpw
+    from hashlib import sha3_512 as hash
     from os import system as sysexec, name as sysname
     from re import compile as regex_compile, error as regex_error
     import sqlite3
 
     # Functional Functions
+    def get_current_submission_time() -> str:
+        return datetime.now().strftime('%Y-%m-%d %H:%M')
+
     def update_available_commands():
         for cmd, details in commands.items():
             if not ('use_requirement' in details and (details['use_requirement'] == "admin" and not isadmin or details['use_requirement'] == "user" and currentuser is None)):
                 available_commands[cmd] = details
 
-    def is_valid_time_interval(start: str, end: str, allow_equal: bool = False, allow_wildcard = False) -> bool:
-        if allow_wildcard and (start == '*' or end == '*'):
-            return True
-        try:
-            start_dt = datetime.strptime(start, '%Y-%m-%d %H:%M')
-            end_dt = datetime.strptime(end, '%Y-%m-%d %H:%M')
-            return start_dt < end_dt if not allow_equal else start_dt <= end_dt
-        except ValueError:
-            return False
+    def is_valid_time_interval(start: str, end: str, allow_equal: bool = False) -> bool:
+        start_dt = datetime.strptime(start, '%Y-%m-%d %H:%M')
+        end_dt = datetime.strptime(end, '%Y-%m-%d %H:%M')
+        if allow_equal:
+            return start_dt <= end_dt
+        else:
+            return start_dt < end_dt
 
-    def is_in_time_interval(interval_start: str, interval_end: str, target_start: str, target_end: str) -> bool: # NO INPUT VALIDATION! USE is_valid_time_interval() BEFORE THIS FUNCTION!
-        interval_start_dt = datetime.strptime(interval_start, '%Y-%m-%d %H:%M') if interval_start != '*' else datetime.min
-        interval_end_dt = datetime.strptime(interval_end, '%Y-%m-%d %H:%M') if interval_end != '*' else datetime.max
+    # Functional Functions for SQL
+    def sql_is_in_time_interval(interval_start: str, interval_end: str, target_start: str, target_end: str) -> bool: # NO INPUT VALIDATION! USE is_valid_time_interval() BEFORE THIS FUNCTION!
+        interval_start_dt = datetime.strptime(interval_start, '%Y-%m-%d %H:%M')
+        interval_end_dt = datetime.strptime(interval_end, '%Y-%m-%d %H:%M')
         target_start_dt = datetime.strptime(target_start, '%Y-%m-%d %H:%M')
         target_end_dt = datetime.strptime(target_end, '%Y-%m-%d %H:%M')
         return not(interval_start_dt >= target_end_dt or interval_end_dt <= target_start_dt)
-        
-    def regex_match(pattern: str, value: str = "") -> bool | None:
+
+    def sql_regex_match(pattern: str, value: str = "") -> bool | None:
         try:
             regex = regex_compile(pattern)
         except regex_error:
@@ -91,7 +97,6 @@ def main():
         "version": {"help": "Show current version info."},
         "cls": {"help": "Clear the screen."},
         "login": {"args": {"username": {"format": "text"}}, "help": "Log in as a user."},
-        "gui": {"help": "Start the GUI version of Booker."},
         # Commands usable as admins
         "reg": {
             "args": {"username": {"format": "text"}},
@@ -133,24 +138,24 @@ def main():
         },
         "search": {
             "args": {
-                "roomIDs": {"format": "csv", "wildcard": True, "default": "*"},
-                "usernames": {"format": "csv", "wildcard": True, "default": "*"},
-                "start": {"format": "time", "wildcard": True, "default": "now"},
-                "end": {"format": "time", "wildcard": True, "default": "*"},
-                "usage": {"format": "text", "default": "."}
+                "roomIDs": {"format": "csv", "default": "*", "substitutions": {"*": "*"}},
+                "usernames": {"format": "csv", "default": "*", "substitutions": {"*": "*"}},
+                "start": {"format": "time", "default": "now", "substitutions": {"*": datetime.min.strftime('%Y-%m-%d %H:%M'), "now": get_current_submission_time}},
+                "end": {"format": "time", "default": "*", "substitutions": {"*": datetime.max.strftime('%Y-%m-%d %H:%M'), "now": get_current_submission_time}},
+                "usage": {"format": "regex", "default": "."}
             },
             "help": "List bookings of the specified rooms booked by specified users within a given time. Usage can be filtered using a regular expression.",
             "use_requirement": "user"
         },
         "show": {
-            "args": {"bookingIDs": {"format": "csv", "wildcard": True, "default": "*"}},
+            "args": {"bookingIDs": {"format": "csv", "default": "*", "substitutions": {"*": "*"}}},
             "help": "Show bookings of specified booking IDs.",
             "use_requirement": "user"
         },
         "book": {
             "args": {
                 "roomIDs": {"format": "csv"},
-                "start": {"format": "time"},
+                "start": {"format": "time", "default": "now", "substitutions": {"now": get_current_submission_time}},
                 "end": {"format": "time"},
                 "usage": {"format": "text"}
             },
@@ -169,11 +174,11 @@ def main():
         },
         "clear": {
             "args": {
-                "roomIDs": {"format": "csv", "wildcard": True},
-                "usernames": {"format": "csv", "wildcard": True},
-                "start": {"format": "time", "wildcard": True},
-                "end": {"format": "time", "wildcard": True},
-                "usage": {"format": "text"}
+                "roomIDs": {"format": "csv", "substitutions": {"*": "*"}},
+                "usernames": {"format": "csv", "substitutions": {"*": "*"}},
+                "start": {"format": "time", "substitutions": {"*": "*"}},
+                "end": {"format": "time", "substitutions": {"*": "*"}},
+                "usage": {"format": "regex", "default": "."}
             },
             "help": "Cancel bookings to make available the specified rooms booked by specified users within a given time. Usage can be filtered using a regular expression. Standard users can only clear their own future bookings.",
             "use_requirement": "user"
@@ -196,7 +201,7 @@ def main():
         connection.execute(
             "CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, pwhash BLOB NOT NULL, isadmin BOOLEAN NOT NULL DEFAULT 0)"
         )
-        connection.execute("INSERT INTO users (username, pwhash, isadmin) VALUES (?, ?, ?)", ("admin", sha3_512(b"admin").digest(), 1))
+        connection.execute("INSERT INTO users (username, pwhash, isadmin) VALUES (?, ?, ?)", ("admin", hash(b"admin").digest(), 1))
         connection.commit()
 
         displayinfo("Initialization: Created 'users' table and added default admin user.")
@@ -214,6 +219,7 @@ def main():
     if connection.execute("SELECT type FROM sqlite_master WHERE type='table' AND name='bookings'").fetchone() is None:
 
         # Create bookings table with prevention of external between-command transaction
+        # Note: Modification to the bookings table should, at all times, be done with foreign key constraints enabled to maintain data consistency and integrity.
         connection.execute(
             "CREATE TABLE IF NOT EXISTS bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, roomID TEXT, username TEXT, start TEXT NOT NULL, end TEXT NOT NULL, usage TEXT NOT NULL, FOREIGN KEY (username) REFERENCES users(username), FOREIGN KEY (roomID) REFERENCES rooms(id))"
         )
@@ -237,14 +243,18 @@ def main():
 
         parser_notice = False
 
+        input = input((('\33[91m'+currentuser+'\33[0m' if isadmin else currentuser) if currentuser is not None else "") + "> ")
+
+        nowdatetime = datetime.now()
+
         # Split input into arguments
         try:
-            args = split(input((('\33[31m'+currentuser+'\33[0m' if isadmin else currentuser) if currentuser is not None else "") + "> "))
+            args = shellsplit(input)
         except ValueError:
-            displayerror("Invalid input. Looks like you forget a closing quote somewhere, or escape characters are not used properly.\nQuotes and backslashes, when used literally, should be escaped with a backslash (\\).")
+            displayerror("Invalid input. Looks like you forget a closing quote somewhere, or escape characters are not used properly.\nQuotes and backslashes, when used literally, should be escaped with a backslash (\\). Escaping character is not available in single quotes.")
             print() # Print a newline for better readability
             continue
-        
+
         # Ignore empty input
         if len(args) == 0:
             continue
@@ -278,7 +288,7 @@ def main():
             if defaults_available:
                 for i in range(len(args)-1, len(available_commands[args[0]]['args'])):
                     args.append(list(available_commands[args[0]]['args'].values())[i]["default"])
-                displayinfo(f"Default values filled. Actually running: {join(args)}")
+                displayinfo(f"Default values filled. Actually running: {shelljoin(args)}")
                 parser_notice = True
             else:
                 displayerror(f"Command '{args[0]}' uses {len(available_commands[args[0]]['args']) if 'args' in available_commands[args[0]] else 0} argument(s). Got {len(args)-1}. Default values are not provided for missing arguments.")
@@ -307,7 +317,9 @@ def main():
 
             if currentuser is not None:
                 print("Arguments of \33[3mcsv\33[0m values, commonly seen if more than one value is allowed in an argument (e.g. IDs), are separated by commas without spaces. e.g. 'room1,room2,room3'.")
-                print("Arguments of \33[3mtime\33[0m values must be in the format 'YYYY-MM-DD HH:MM'. e.g. '2008-04-17 12:00'. Additionally, 'now' can be used to refer to current time.")
+                print("Arguments of \33[3mtime\33[0m values must be in the format 'YYYY-MM-DD HH:MM'. e.g. '2008-04-17 12:00'. Additionally, 'now' can be used to refer to current time if applicable.")
+                print("Arguments of \33[3mregex\33[0m values must be a valid regular expression. Matching is done from the beginning of the target text (invisible '^' has been prepended). e.g. '.' to match everything, or 'room\d+$' to match room IDs that start with 'room' followed by one or more digits.")
+                print("Arguments of \33[3mtext\33[0m values can be any text without special formatting.")
                 print("Wildcard '*' usually means \33[3mall\33[0m. For some time input, it can be used to remove respective time constraints according to context. e.g. Using '*' as start time and '2008-04-17' as end time means every record until '2008-04-17'.")
             else:
                 print("More commands are available after login.")
@@ -352,8 +364,7 @@ def main():
                 with open(Path(__file__).resolve().parent.parent/"LICENSE", "r") as license_file:
                     print(license_file.read())
             else:
-                displayerror("No license file is found. This may indicate an illegal distribution.")
-                displayerror("This program is originally released under the MIT License by Chen Hang Tsz Henry. Please refer to the source code repository for more information.")
+                displayerror("No license file is found. This may indicate an illegal distribution.\nThis program is originally released under the MIT License by Chen Hang Tsz Henry. Please refer to the source code repository for more information.")
 
         elif args[0] == "cls":
 
@@ -361,7 +372,7 @@ def main():
 
         elif args[0] == "login":
 
-            pwhash = sha3_512(getpass("Password: ").encode()).digest()
+            pwhash = hash(inputpw("Password: ").encode()).digest()
 
             connection = sqlite3.connect(DB_PATH)
             result = connection.execute("SELECT isadmin FROM users WHERE username=? AND pwhash=?", (args[1], pwhash)).fetchone()
@@ -380,8 +391,8 @@ def main():
         elif currentuser is not None:
             if args[0] == "cp":
 
-                if (new_password := getpass("New Password: ")) == getpass("Confirm New Password: "):
-                    new_pwhash = sha3_512(new_password.encode()).digest()
+                if (new_password := inputpw("New Password: ")) == inputpw("Confirm New Password: "):
+                    new_pwhash = hash(new_password.encode()).digest()
 
                     connection = sqlite3.connect(DB_PATH)
                     connection.execute("UPDATE users SET pwhash=? WHERE username=?", (new_pwhash, currentuser))
@@ -411,6 +422,9 @@ def main():
 
             elif args[0] == "search":
 
+                error = False
+
+                # Extract input
                 room_ids = args[1].split(',')
                 user_ids = args[2].split(',')
                 start = args[3]
@@ -419,93 +433,96 @@ def main():
 
                 connection = sqlite3.connect(DB_PATH)
 
+                # Input validity checks
                 params = []
                 if room_ids[0] != '*':
-                    room_ids = [room for room in room_ids if connection.execute("SELECT id FROM rooms WHERE id=?", [room]).fetchone() is not None or displaywarning(f"Room '{room}' does not exist and is skipped.") and (command_notice := True)]
+                    room_ids = [room for room in room_ids if connection.execute("SELECT 0 FROM rooms WHERE id=?", [room]).fetchone() is not None or (command_notice := True) and displaywarning(f"Room '{room}' does not exist and is skipped.")]
                     params.extend(room_ids)
                 if user_ids[0] != '*':
-                    user_ids = [user for user in user_ids if connection.execute("SELECT username FROM users WHERE username=?", [user]).fetchone() is not None or displaywarning(f"User '{user}' does not exist and is skipped.") and (command_notice := True)]
+                    user_ids = [user for user in user_ids if connection.execute("SELECT 0 FROM users WHERE username=?", [user]).fetchone() is not None or (command_notice := True) and displaywarning(f"User '{user}' does not exist and is skipped.")]
                     params.extend(user_ids)
-                now = datetime.now().strftime('%Y-%m-%d %H:%M')
-                if start != '*':
-                    if start == 'now':
-                        start = now
-                        displayinfo(f"Using current time {start} as start time.")
-                        command_notice = True
-                params.append(start)
-                if end != '*':
-                    if end == 'now':
-                        end = now
-                        displayinfo(f"Using current time {end} as end time.")
-                        command_notice = True
-                params.append(end)
-                params.append(usage)
-
-                if is_valid_time_interval(start, end, allow_wildcard=True):
-                    if regex_match(usage) is not None:
-
-                        connection.create_function("in_interval", 4, is_in_time_interval)
-                        connection.create_function("regex", 2, regex_match)
-                        
-                        query = f"SELECT * FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"} AND in_interval(?, ?, start, end) AND regex(?, usage) ORDER BY strftime('%F %R', start), roomID"
-
-                        bookings = connection.execute(query, params).fetchall()
-
-                        print() if command_notice else None # Print a newline if there was a in-command notice
-
-                        if bookings:
-                            displaysuccess("Bookings found:")
-                            display_table(
-                                ["Booking ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
-                                [10, 10, 20, 20, 20, 0],
-                                *bookings
-                            )
-                        else:
-                            displaysuccess("No bookings found. The time slot is free.")
-
-                    else:
-                        displayerror("Usage input is invalid. Please use a valid regular expression for usage filtering.")
+                if (start_dt := parse_time(start, allow_wildcard=True)) is not None:
+                    params.append(start_dt.strftime('%Y-%m-%d %H:%M'))
                 else:
-                    displayerror("Invalid time input. Either the end time is not later than the start time, or the time format is incorrect. Refer to the manual for more information.")
+                    displayerror("Start time input is invalid. Refer to the manual for more information.")
+                    error = True
+                if (end_dt := parse_time(end, allow_wildcard=True, is_start=False)) is not None:
+                    params.append(end_dt.strftime('%Y-%m-%d %H:%M'))
+                else:
+                    displayerror("End time input is invalid. Refer to the manual for more information.")
+                    error = True
+                if sql_regex_match(usage) is not None:
+                    params.append(usage)
+                else:
+                    displayerror("Usage input is invalid. Please use a valid regular expression for usage filtering.")
+                    error = True
+
+                # Input consistency checks
+                if not error and not is_valid_time_interval(start_dt, end_dt):
+                    displayerror("Time input is inconsistent. The end time must be later than the start time.")
+                    error = True
+
+                if not error:                
+                    print() if command_notice else None # Print a newline if there was a in-command notice
+
+                    connection.create_function("in_interval", 4, sql_is_in_time_interval)
+                    connection.create_function("regex", 2, sql_regex_match)
+                            
+                    query = f"SELECT * FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"} AND in_interval(?, ?, start, end) AND regex(?, usage) ORDER BY strftime('%F %R', start), roomID"
+
+                    actual_bookings = connection.execute(query, params).fetchall()
+
+                    if actual_bookings:
+                        displaysuccess("Bookings found:")
+                        display_table(
+                            ["Booking ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
+                            [10, 10, 20, 20, 20, 0],
+                            *actual_bookings
+                        )
+                    else:
+                        displaysuccess("No bookings found. The time slot is free.")
 
                 connection.commit()
                 connection.close()
 
             elif args[0] == "show":
 
+                # Extract input
                 booking_ids = args[1].split(',')
-                bookings = []
 
                 connection = sqlite3.connect(DB_PATH)
 
+                # Input validity checks & fetching results
                 if booking_ids[0] == '*':
-                    bookings = connection.execute("SELECT * FROM bookings").fetchall()
+                    actual_bookings = connection.execute("SELECT * FROM bookings").fetchall()
                 else:
+                    actual_bookings = []
                     for booking_id in booking_ids:
                         booking = connection.execute("SELECT * FROM bookings WHERE id=?", [booking_id]).fetchone()
                         if booking is None:
                             displaywarning(f"Booking ID '{booking_id}' does not exist and is skipped.")
                             command_notice = True
                             continue
-                        bookings.append(booking)
+                        actual_bookings.append(booking)
 
                 connection.commit()
                 connection.close()
 
                 print() if command_notice else None # Print a newline if there was a in-command notice
 
-                if bookings:
+                if actual_bookings:
                     displaysuccess("Bookings found:")
                     display_table(
                         ["Booking ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
                         [10, 10, 20, 20, 20, 0],
-                        *bookings
+                        *actual_bookings
                     )
                 else:
                     displayerror("No bookings found.")
 
             elif args[0] == "book":
 
+                # Extract input
                 room_ids = args[1].split(',')
                 start = args[2]
                 end = args[3]
@@ -516,21 +533,28 @@ def main():
                 connection.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
                 connection.execute("BEGIN EXCLUSIVE")
 
-                now = datetime.now().strftime('%Y-%m-%d %H:%M')
-                if start == 'now':
-                    start = now
-                    displayinfo(f"Using current time {start} as start time.")
-                    command_notice = True
-                if end == 'now':
-                    end = now
-                    displayinfo(f"Using current time {end} as end time.")
-                    command_notice = True
+                # Input validity checks
+                if (start_dt := parse_time(start)) is not None:
+                    params.append(start_dt.strftime('%Y-%m-%d %H:%M'))
+                else:
+                    displayerror("Start time input is invalid. Refer to the manual for more information.")
+                    error = True
+                if (end_dt := parse_time(end, allow_now=False)) is not None:
+                    params.append(end_dt.strftime('%Y-%m-%d %H:%M'))
+                else:
+                    displayerror("End time input is invalid. Refer to the manual for more information.")
+                    error = True
+                if sql_regex_match(usage) is not None:
+                    params.append(usage)
+                else:
+                    displayerror("Usage input is invalid. Please use a valid regular expression for usage filtering.")
+                    error = True
 
                 if isadmin or is_valid_time_interval(now, start, allow_equal=True):
                     if is_valid_time_interval(start, end):
                         if len(usage) > 0:
 
-                            connection.create_function("in_interval", 4, is_in_time_interval)
+                            connection.create_function("in_interval", 4, sql_is_in_time_interval)
 
                             for room_id in room_ids:
                                 if connection.execute("SELECT id FROM rooms WHERE id=?", [room_id]).fetchone() is None:
@@ -695,10 +719,10 @@ def main():
 
                     if isadmin or is_valid_time_interval(now, start, allow_equal=True):
                         if is_valid_time_interval(start, end, allow_wildcard=True):
-                            if regex_match(usage) is not None:
+                            if sql_regex_match(usage) is not None:
 
-                                connection.create_function("in_interval", 4, is_in_time_interval)
-                                connection.create_function("regex", 2, regex_match)
+                                connection.create_function("in_interval", 4, sql_is_in_time_interval)
+                                connection.create_function("regex", 2, sql_regex_match)
 
                                 query = f"SELECT id, username FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"} AND {'in_interval(?, ?, start, end)' if start != '*' and end != '*' else "TRUE"} AND regex(?, usage)"
 
@@ -751,7 +775,7 @@ def main():
 
                     print() if command_notice else None # Print a newline if there was a in-command notice
 
-                    pwhash = sha3_512(getpass("Password: ").encode()).digest()
+                    pwhash = hash(inputpw("Password: ").encode()).digest()
                     connection.execute("INSERT OR REPLACE users (username, pwhash) VALUES (?, ?)", (args[1], pwhash))
                     displaysuccess(f"User '{args[1]}' registered successfully.")
 
