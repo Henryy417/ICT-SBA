@@ -12,7 +12,8 @@ Booker is a command-line room booking system for managing users, rooms, and book
 - Search and show bookings with flexible filters
 - Raw SQL query execution
 
-## Getting Started
+## Suage
+### Getting Started
 1. To use it on your computer, run the script as a standalone program:
     ```bash
     python main.py
@@ -28,9 +29,9 @@ Booker is a command-line room booking system for managing users, rooms, and book
 3. If you want to make Booker a back-end shell:
     Compile the source file like in (2). Manage Booker's standard input/output/error streams in your front-end app. If you are using Python, you may need the `subprocess` module.
 
-## Command Reference
+### Command Reference
 These are the currently available commands in Booker:
-### Pre-login Commands
+#### Pre-login Commands
 | Command   | Description                       |
 |-----------|-----------------------------------|
 | help      | Show help message                 |
@@ -40,7 +41,7 @@ These are the currently available commands in Booker:
 | cls       | Clear the screen                  |
 | login     | Log in as a user                  |
 
-### Admin Commands (after login)
+#### Admin Commands (after login)
 | Command     | Description                                 |
 |-------------|---------------------------------------------|
 | reg         | Register a new user or update password      |
@@ -50,7 +51,7 @@ These are the currently available commands in Booker:
 | destroy     | Delete rooms                                |
 | sql         | Execute raw SQL query                       |
 
-### User Commands (after login)
+#### User Commands (after login)
 | Command   | Description                                   |
 |-----------|-----------------------------------------------|
 | cp        | Change password for current user              |
@@ -62,14 +63,14 @@ These are the currently available commands in Booker:
 | cancel    | Cancel bookings                               |
 | clear     | Cancel bookings with filters                  |
 
-## Arguments & Formats
+### Arguments & Formats
 - **csv**: Comma-separated values that are not empty (e.g., `room1,room2`)
 - **time**: Format `YYYY-MM-DD HH:MM` or `now` sometimes
 - **text**: Free text that is not empty without special formatting
 - **regex**: Regular expression pattern for flexible matching
 > Note: Some arguments accept a wildcard (`*`) for flexible matching.
 
-## Error Handling
+### Error Handling
 - Errors, warnings, and info messages are color-coded.
 - All errors are logged to `error.log`.
 
