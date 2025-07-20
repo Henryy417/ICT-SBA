@@ -65,7 +65,7 @@ These are the currently available commands in Booker:
 
 ### Arguments & Formats
 - **csv**: Comma-separated values that are not empty (e.g., `room1,room2`)
-- **time**: Format `YYYY-MM-DD HH:MM` or `now` sometimes
+- **time**: Format `YYYY-MM-DD HH:MM` or `now`
 - **text**: Free text that is not empty without special formatting
 - **regex**: Regular expression pattern for flexible matching
 > Note: Some arguments accept a wildcard (`*`) for flexible matching.

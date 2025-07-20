@@ -159,7 +159,7 @@ def main():
             "args": {
                 "roomIDs": {"format": "csv"},
                 "start": {"format": "time", "default": "now", "substitutions": {"now": get_current_submission_time}},
-                "end": {"format": "time"},
+                "end": {"format": "time", "substitutions": {"now": get_current_submission_time}},
                 "usage": {"format": "text"}
             },
             "help": "Make a reservation for specified rooms at a given time.",
@@ -179,8 +179,8 @@ def main():
             "args": {
                 "roomIDs": {"format": "csv", "substitutions": {"*": "*"}},
                 "usernames": {"format": "csv", "substitutions": {"*": "*"}},
-                "start": {"format": "time", "substitutions": {"*": datetime.min.strftime('%Y-%m-%d %H:%M')}},
-                "end": {"format": "time", "substitutions": {"*": datetime.max.strftime('%Y-%m-%d %H:%M')}},
+                "start": {"format": "time", "substitutions": {"*": datetime.min.strftime('%Y-%m-%d %H:%M'), "now": get_current_submission_time}},
+                "end": {"format": "time", "substitutions": {"*": datetime.max.strftime('%Y-%m-%d %H:%M'), "now": get_current_submission_time}},
                 "usage": {"format": "regex", "default": ""}
             },
             "help": "Cancel bookings to make available the specified rooms booked by specified users within a given time. Usage can be filtered using a regular expression. Standard users can only clear their own future bookings.",
@@ -420,10 +420,10 @@ def main():
 
             if currentuser is not None:
                 print("Arguments of \33[3mcsv\33[0m values, commonly seen if more than one value is allowed in an argument (e.g. IDs), are separated by commas without spaces. Values cannot be empty. e.g. 'room1,room2,room3'.")
-                print("Arguments of \33[3mtime\33[0m values must be in the format 'YYYY-MM-DD HH:MM'. e.g. '2008-04-17 12:00'. Additionally, 'now' can be used to refer to current time if applicable.")
+                print("Arguments of \33[3mtime\33[0m values must be in the format 'YYYY-MM-DD HH:MM'. e.g. '2008-04-17 12:00'. Additionally, 'now' can be used to refer to current time.")
                 print("Arguments of \33[3mregex\33[0m values must be a valid regular expression. Matching is done from the beginning of the target text (invisible '^' has been prepended). e.g. '.' to match everything, or 'room\\d+$' to match room IDs that start with 'room' followed by one or more digits.")
                 print("Arguments of \33[3mtext\33[0m values can be any text that is not empty without special formatting.")
-                print("Wildcard '*' usually means \33[3mall\33[0m. For some time input, it can be used to remove respective time constraints according to context. e.g. Using '*' as start time and '2008-04-17' as end time means every record until '2008-04-17'.")
+                print("Wildcard '*' can often be used. It usually means \33[3mall\33[0m. For some time input, it can be used to remove respective time constraints according to context. e.g. Using '*' as start time and '2008-04-17' as end time means every record until '2008-04-17'.")
             else:
                 print("More commands are available after login.")
 
