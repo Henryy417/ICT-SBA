@@ -1,7 +1,3 @@
-## TODO ##
-# - Check input validity in parser
-# - Add named arguments support for commands
-
 # Global imports
 from pathlib import Path
 from datetime import datetime
@@ -36,19 +32,35 @@ def display_table(headers: list[str], widths: list[int], *rows: list):
             line_buffer += str(item).ljust(width)
         print(line_buffer)
 
+# Program information
+INFO = "Booker v2.0"
+
+# Customizable program information
+DB_PATH = Path(__file__).resolve().parent/"data.db"
+
 def main():
     ## Initialization ##
-    # Functional imports
-    from shlex import split as shellsplit, join as shelljoin
+    # Functional imports and mofications
     from getpass import getpass as inputpw
     from hashlib import sha3_512 as hash
     from os import system as sysexec, name as sysname
     from re import compile as regex_compile, error as regex_error
+    from shlex import shlex
+    class QuotingShlex(shlex):
+        def __init__(self, data, **kwargs):
+            super().__init__(data, **kwargs)
+            self.quoted = False
+
+        def get_token(self):
+            token = super().get_token()
+            # After a quoted token, self.state holds "'" or '"'
+            self.quoted = self.state in ("'", '"')
+            return token
     import sqlite3
 
     # Functional Functions
     def get_current_submission_time() -> str:
-        return datetime.now().strftime('%Y-%m-%d %H:%M')
+        return current_submission_time
 
     def update_available_commands():
         for cmd, details in commands.items():
@@ -63,26 +75,16 @@ def main():
         else:
             return start_dt < end_dt
 
-    # Functional Functions for SQL
-    def sql_is_in_time_interval(interval_start: str, interval_end: str, target_start: str, target_end: str) -> bool: # NO INPUT VALIDATION! USE is_valid_time_interval() BEFORE THIS FUNCTION!
+    # Functional Functions for SQL: NO INPUT VALIDATION!
+    def sql_is_in_time_interval(interval_start: str, interval_end: str, target_start: str, target_end: str) -> bool:
         interval_start_dt = datetime.strptime(interval_start, '%Y-%m-%d %H:%M')
         interval_end_dt = datetime.strptime(interval_end, '%Y-%m-%d %H:%M')
         target_start_dt = datetime.strptime(target_start, '%Y-%m-%d %H:%M')
         target_end_dt = datetime.strptime(target_end, '%Y-%m-%d %H:%M')
         return not(interval_start_dt >= target_end_dt or interval_end_dt <= target_start_dt)
 
-    def sql_regex_match(pattern: str, value: str = "") -> bool | None:
-        try:
-            regex = regex_compile(pattern)
-        except regex_error:
-            return None # Return None if the regex pattern is invalid
-        return regex.match(value) is not None
-
-    # Program information
-    INFO = "Booker v1.0"
-
-    # Customizable program information
-    DB_PATH = Path(__file__).resolve().parent/"data.db"
+    def sql_regex_match(pattern: str, value: str = "") -> bool:
+        return regex_compile(pattern).match(value) is not None
 
     # Placeholder for user authentication
     currentuser = None  # Placeholder for current user
@@ -142,7 +144,7 @@ def main():
                 "usernames": {"format": "csv", "default": "*", "substitutions": {"*": "*"}},
                 "start": {"format": "time", "default": "now", "substitutions": {"*": datetime.min.strftime('%Y-%m-%d %H:%M'), "now": get_current_submission_time}},
                 "end": {"format": "time", "default": "*", "substitutions": {"*": datetime.max.strftime('%Y-%m-%d %H:%M'), "now": get_current_submission_time}},
-                "usage": {"format": "regex", "default": "."}
+                "usage": {"format": "regex", "default": ""}
             },
             "help": "List bookings of the specified rooms booked by specified users within a given time. Usage can be filtered using a regular expression.",
             "use_requirement": "user"
@@ -178,7 +180,7 @@ def main():
                 "usernames": {"format": "csv", "substitutions": {"*": "*"}},
                 "start": {"format": "time", "substitutions": {"*": "*"}},
                 "end": {"format": "time", "substitutions": {"*": "*"}},
-                "usage": {"format": "regex", "default": "."}
+                "usage": {"format": "regex", "default": ""}
             },
             "help": "Cancel bookings to make available the specified rooms booked by specified users within a given time. Usage can be filtered using a regular expression. Standard users can only clear their own future bookings.",
             "use_requirement": "user"
@@ -232,94 +234,192 @@ def main():
 
         displayinfo("Initialization: Created 'bookings' table.")
 
-    connection.close()
-
     print() # Print a newline for better readability
 
     ## Main loop ##
     while True:
 
+        # End database access
+        connection.commit() # Commit any previous changes to the database and avoid database lock issues
+        connection.close() # Close previous connection to avoid resource usage
+
         # Parser #
 
-        parser_notice = False
+        raw = input((('\33[91m'+currentuser+'\33[0m' if isadmin else currentuser) if currentuser is not None else "") + "> ").strip()
 
-        input = input((('\33[91m'+currentuser+'\33[0m' if isadmin else currentuser) if currentuser is not None else "") + "> ")
+        # Re-initialize database access
+        connection = sqlite3.connect(DB_PATH) # Initialize database connection for command execution
+        connection.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
 
-        nowdatetime = datetime.now()
+        # Check if user still exists
+        if currentuser is not None:
+            result_isadmin = connection.execute("SELECT isadmin FROM users WHERE username = ?", (currentuser,)).fetchone()
+            if result_isadmin is None:
+                displayerror("Administrators have removed your account. You are now logged out.")
+                print()
+                continue
+            elif result_isadmin[0] != isadmin:
+                update_available_commands()
 
-        # Split input into arguments
+        # Ignore empty input
+        if len(raw) == 0:
+            continue
+
+        current_submission_time = datetime.now().strftime('%Y-%m-%d %H:%M') # NEVER USE THIS DIRECTLY, USE get_current_submission_time() INSTEAD!
+        # Initialize the parser
         try:
-            args = shellsplit(input)
+            container = QuotingShlex(raw, posix=True, punctuation_chars=True) # Use posix=True to enable POSIX shell-like parsing, punctuation_chars to allow hyphens in words
         except ValueError:
             displayerror("Invalid input. Looks like you forget a closing quote somewhere, or escape characters are not used properly.\nQuotes and backslashes, when used literally, should be escaped with a backslash (\\). Escaping character is not available in single quotes.")
             print() # Print a newline for better readability
             continue
 
-        # Ignore empty input
-        if len(args) == 0:
-            continue
+        cmd = container.get_token()
 
-        # Check if command exists
-        if args[0] not in available_commands:
+        # Check if cmd is an abbreviation if it is not a full command
+        if cmd not in available_commands:
             possiblecmds = []
-            for cmd in available_commands:
-                if cmd.startswith(args[0]):
-                        possiblecmds.append(cmd)
-            if len(possiblecmds) == 0:
-                displayerror(f"Command or abbreviation '{args[0]}' not found. Type 'help' for a list of commands.")
+            for command in available_commands:
+                if command.startswith(cmd):
+                    possiblecmds.append(command)
+            if len(possiblecmds) == 0: 
+                displayerror(f"Command or abbreviation '{cmd}' not found. Type 'help' for a list of commands.")
                 print() # Print a newline for better readability
                 continue
             elif len(possiblecmds) == 1:
-                args[0] = possiblecmds[0]
+                cmd = possiblecmds[0]
                 displayinfo(f"Command abbreviation interpreted as '{possiblecmds[0]}'.")
-                parser_notice = True
             else:
-                displayerror(f"Command abbreviation '{args[0]}' is ambiguous. Which of the following commands did you mean: {', '.join(possiblecmds)}?")
+                displayerror(f"Command abbreviation '{cmd}' is ambiguous. Which of the following commands did you mean: {', '.join(possiblecmds)}?")
                 print() # Print a newline for better readability
                 continue
+        
+        # Parse the command arguments
+        unchecked_args = {"named": {}, "positional": []}
 
-        # Check required number of arguments and fill defaults if necessary
-        if len(args)-1 < (len(available_commands[args[0]]['args']) if 'args' in available_commands[args[0]] else 0):
-            defaults_available = True
-            for _ in range(len(args)-1, len(available_commands[args[0]]['args'])):
-                if 'default' not in list(available_commands[args[0]]['args'].values())[_]:
-                    defaults_available = False
+        exit_loop = False
+        argname = None
+        while (word := container.get_token()) is not None:
+            if argname is None and not container.quoted and word.startswith('--'):
+                # Named argument
+                argname = word[2:]  # Remove the leading '--'
+                if argname in unchecked_args["named"]:
+                    displayerror(f"Assigning two values to the same named argument '{argname}' makes no sense.")
+                    print()
+                    exit_loop = True
                     break
-            if defaults_available:
-                for i in range(len(args)-1, len(available_commands[args[0]]['args'])):
-                    args.append(list(available_commands[args[0]]['args'].values())[i]["default"])
-                displayinfo(f"Default values filled. Actually running: {shelljoin(args)}")
-                parser_notice = True
+            elif argname is not None:
+                # Value for the named argument
+                unchecked_args["named"][argname] = word
+                argname = None
             else:
-                displayerror(f"Command '{args[0]}' uses {len(available_commands[args[0]]['args']) if 'args' in available_commands[args[0]] else 0} argument(s). Got {len(args)-1}. Default values are not provided for missing arguments.")
-                print() # Print a newline for better readability
-                continue
-        elif len(args)-1 > (len(available_commands[args[0]]['args']) if 'args' in available_commands[args[0]] else 0):
-            displaywarning(f"Command '{args[0]}' requires only {len(available_commands[args[0]]['args']) if 'args' in available_commands[args[0]] else 0} argument(s). Got {len(args)-1}.")
-            parser_notice = True
+                # Positional argument
+                unchecked_args["positional"].append(word)
+        if exit_loop:
+            continue
+        if argname is not None:
+            # If we reach here and argname is not None, it means the last argument was a named argument without a value
+            displayerror(f"Named argument '{argname}' is not assigned a value.")
+            print()
+            continue
 
-        print() if parser_notice else None # Print a newline if there was a parser notice
+        # Check arguments required by the command and fill defaults if necessary
+        args = {}
+    
+        if 'args' in available_commands[cmd]:
+            exit_loop = False
+            for required_arg in available_commands[cmd]['args']:
+                if required_arg in unchecked_args["named"]:
+                    # Named argument provided
+                    args[required_arg] = unchecked_args["named"].pop(required_arg)
+                elif unchecked_args["positional"]:
+                    # Positional argument provided
+                    args[required_arg] = unchecked_args["positional"].pop(0)
+                elif 'default' in available_commands[cmd]['args'][required_arg]:
+                    # Default value provided for user-unprovided arguments
+                    args[required_arg] = available_commands[cmd]['args'][required_arg]['default']
+                else:
+                    # No value provided and no default value available
+                    displayerror(f"Command '{cmd}' requires argument '{required_arg}' but it is not provided.")
+                    print()
+                    exit_loop = True
+                    break
+            if exit_loop:
+                continue
+
+        if len(unchecked_args["named"]) > 0 or len(unchecked_args["positional"]) > 0:
+            displaywarning(f"More arguments passed than needed.")
+            print()
+
+        # Fill substitutions for arguments
+        for arg, value in args.items():
+            if 'substitutions' in available_commands[cmd]['args'][arg]:
+                for sub, replacement in available_commands[cmd]['args'][arg]['substitutions'].items():
+                    if value == sub:
+                        args[arg] = replacement() if callable(replacement) else replacement
+                        break
+
+        # Check arguments' formats and transform them if necessary
+        exit_loop = False
+        for arg, value in args.items():
+            if 'format' in available_commands[cmd]['args'][arg]:
+                if available_commands[cmd]['args'][arg]['format'] == "time":
+                    try:
+                        datetime.strptime(value, '%Y-%m-%d %H:%M')
+                    except ValueError:
+                        displayerror(f"Argument '{arg}' is not a valid time input.")
+                        print()
+                        exit_loop = True
+                        break
+                elif available_commands[cmd]['args'][arg]['format'] == "regex":
+                    try:
+                        regex_compile(value)
+                    except regex_error:
+                        displayerror(f"Argument '{arg}' is not a valid regular expression.")
+                        print()
+                        exit_loop = True
+                        break
+                elif available_commands[cmd]['args'][arg]['format'] == "text":
+                    if len(value) == 0:
+                        displayerror(f"Argument '{arg}' cannot be empty.")
+                        print()
+                        exit_loop = True
+                        break
+                elif available_commands[cmd]['args'][arg]['format'] == "csv":
+                    args[arg] = [v.strip() for v in value.split(',')]
+                    if '' in args[arg]:
+                        displayerror(f"Values in '{arg}' cannot be empty.")
+                        print()
+                        exit_loop = True
+                        break
+        if exit_loop:
+            continue
+
+        displayinfo(f"Executing: {cmd + (' ' + ' '.join(f'--{k} "{v}"' for k, v in args.items()) if args else '')}")
+
+        print() # Print a newline for better readability
 
         # Command Handlers #
 
         command_notice = False
 
         # Commands that can be used before login
-        if args[0] == "help":
+        if cmd == "help":
 
             print("Use 'man' to receive more information about a specific command.")
+            print("Each word is separated by a space. If you want to use spaces in a single word, please quote the argument with single or double quotes. Escaping characters is not allowed in single quotes.")
             print("Command abbreviations are allowed. Enter the first few letters of a command. Note that the parser tries to see the input as a complete command before seeking a possible abbreviation.")
             print("After entering a command, add a space then the arguments if arguments are required.\n")
-            print("Arguments are separated by spaces. If an argument contains spaces, it must be quoted with single or double quotes.")
+            print("Arguments can be either named or positional. For named arguments, input double hyphen '--' followed the argument name in the same word, and then the argument value as another. Quote the word if you want to have '--' at the beginning literally. For positional arguments, input the value directly as a word. They will be taken as the the first unfilled argument in the command.")
             print("Default values of arguments, if exist, will be filled when not enough arguments are provided.")
 
             print() # Print a newline for better readability
 
             if currentuser is not None:
-                print("Arguments of \33[3mcsv\33[0m values, commonly seen if more than one value is allowed in an argument (e.g. IDs), are separated by commas without spaces. e.g. 'room1,room2,room3'.")
+                print("Arguments of \33[3mcsv\33[0m values, commonly seen if more than one value is allowed in an argument (e.g. IDs), are separated by commas without spaces. Values cannot be empty. e.g. 'room1,room2,room3'.")
                 print("Arguments of \33[3mtime\33[0m values must be in the format 'YYYY-MM-DD HH:MM'. e.g. '2008-04-17 12:00'. Additionally, 'now' can be used to refer to current time if applicable.")
-                print("Arguments of \33[3mregex\33[0m values must be a valid regular expression. Matching is done from the beginning of the target text (invisible '^' has been prepended). e.g. '.' to match everything, or 'room\d+$' to match room IDs that start with 'room' followed by one or more digits.")
-                print("Arguments of \33[3mtext\33[0m values can be any text without special formatting.")
+                print("Arguments of \33[3mregex\33[0m values must be a valid regular expression. Matching is done from the beginning of the target text (invisible '^' has been prepended). e.g. '.' to match everything, or 'room\\d+$' to match room IDs that start with 'room' followed by one or more digits.")
+                print("Arguments of \33[3mtext\33[0m values can be any text that is not empty without special formatting.")
                 print("Wildcard '*' usually means \33[3mall\33[0m. For some time input, it can be used to remove respective time constraints according to context. e.g. Using '*' as start time and '2008-04-17' as end time means every record until '2008-04-17'.")
             else:
                 print("More commands are available after login.")
@@ -332,25 +432,30 @@ def main():
                 *[[cmd, details['help']] for cmd, details in available_commands.items()]
             )
 
-        elif args[0] == "man":
+        elif cmd == "man":
 
-            if args[1] in available_commands:
+            if args["command"] in available_commands:
                 print("Usage:")
-                syntax_text = args[1]+" "
-                if 'args' in available_commands[args[1]]:
-                    for arg, prop in available_commands[args[1]]["args"].items():
-                        syntax_text += f"[{prop['format']}{"|*" if 'wildcard' in prop else ''}: {arg}{"="+str(prop.get('default')) if 'default' in prop else ''}] " # Syntax for each argument
+                syntax_text = args["command"]
+                if 'args' in available_commands[args["command"]]:
+                    syntax_text += ' '
+                    for arg, prop in available_commands[args["command"]]["args"].items():
+                        syntax_text += f"[{prop['format']}{('|' + '|'.join(prop['substitution'])) if 'substitution' in prop else ''}{"="+prop['default'] if 'default' in prop else ''}] " # Syntax for each argument
                 print(syntax_text.strip())
                 print("\nDescription:")
-                print(available_commands[args[1]]['help'])
+                print(available_commands[args["command"]]['help'])
             else:
-                displayerror(f"No manual entry for command '{args[1]}'.")
+                displayerror(f"No manual entry for command '{args["command"]}'.")
 
-        elif args[0] == "exit":
+        elif cmd == "exit":
+
+            # End database access
+            connection.commit() # Commit any previous changes to the database and avoid database lock issues
+            connection.close() # Close previous connection to avoid resource usage
 
             raise SystemExit(0)
 
-        elif args[0] == "version":
+        elif cmd == "version":
 
             print(INFO)
             
@@ -366,22 +471,19 @@ def main():
             else:
                 displayerror("No license file is found. This may indicate an illegal distribution.\nThis program is originally released under the MIT License by Chen Hang Tsz Henry. Please refer to the source code repository for more information.")
 
-        elif args[0] == "cls":
+        elif cmd == "cls":
 
             sysexec("cls" if sysname == "nt" else "clear") # Compatible with older Windows without PowerShell
 
-        elif args[0] == "login":
+        elif cmd == "login":
 
             pwhash = hash(inputpw("Password: ").encode()).digest()
 
-            connection = sqlite3.connect(DB_PATH)
-            result = connection.execute("SELECT isadmin FROM users WHERE username=? AND pwhash=?", (args[1], pwhash)).fetchone()
-            connection.commit()
-            connection.close()
+            result_user = connection.execute("SELECT isadmin FROM users WHERE username=? AND pwhash=?", (args["username"], pwhash)).fetchone()
 
-            if result is not None:
+            if result_user is not None:
                 currentuser = args[1]
-                isadmin = result[0] == 1
+                isadmin = result_user[0] == 1
                 update_available_commands()
                 displaysuccess(f"Logged in as '{currentuser}'.")
             else:
@@ -389,435 +491,341 @@ def main():
 
         # Commands that can be used only after login
         elif currentuser is not None:
-            if args[0] == "cp":
+            if cmd == "cp":
 
                 if (new_password := inputpw("New Password: ")) == inputpw("Confirm New Password: "):
                     new_pwhash = hash(new_password.encode()).digest()
 
-                    connection = sqlite3.connect(DB_PATH)
                     connection.execute("UPDATE users SET pwhash=? WHERE username=?", (new_pwhash, currentuser))
-                    connection.commit()
-                    connection.close()
 
                     displaysuccess("Password changed successfully.")
                 else:
                     displayerror("Passwords do not match. Please try again.")
 
-            elif args[0] == "rooms":
+            elif cmd == "rooms":
 
-                connection = sqlite3.connect(DB_PATH)
-                rooms = connection.execute("SELECT id, description FROM rooms ORDER BY id").fetchall()
-                connection.commit()
-                connection.close()
+                result_rooms = connection.execute("SELECT id, description FROM rooms ORDER BY id").fetchall()
 
-                if rooms:
+                if result_rooms:
                     displaysuccess("Rooms found:")
                     display_table(
                         ["ID", "Description"],
                         [10, 0],
-                        *rooms
+                        *result_rooms
                     )
                 else:
                     displaywarning("No rooms found. Please create rooms using the 'build' command.")
 
-            elif args[0] == "search":
-
-                error = False
-
-                # Extract input
-                room_ids = args[1].split(',')
-                user_ids = args[2].split(',')
-                start = args[3]
-                end = args[4]
-                usage = args[5]
-
-                connection = sqlite3.connect(DB_PATH)
-
-                # Input validity checks
-                params = []
-                if room_ids[0] != '*':
-                    room_ids = [room for room in room_ids if connection.execute("SELECT 0 FROM rooms WHERE id=?", [room]).fetchone() is not None or (command_notice := True) and displaywarning(f"Room '{room}' does not exist and is skipped.")]
-                    params.extend(room_ids)
-                if user_ids[0] != '*':
-                    user_ids = [user for user in user_ids if connection.execute("SELECT 0 FROM users WHERE username=?", [user]).fetchone() is not None or (command_notice := True) and displaywarning(f"User '{user}' does not exist and is skipped.")]
-                    params.extend(user_ids)
-                if (start_dt := parse_time(start, allow_wildcard=True)) is not None:
-                    params.append(start_dt.strftime('%Y-%m-%d %H:%M'))
-                else:
-                    displayerror("Start time input is invalid. Refer to the manual for more information.")
-                    error = True
-                if (end_dt := parse_time(end, allow_wildcard=True, is_start=False)) is not None:
-                    params.append(end_dt.strftime('%Y-%m-%d %H:%M'))
-                else:
-                    displayerror("End time input is invalid. Refer to the manual for more information.")
-                    error = True
-                if sql_regex_match(usage) is not None:
-                    params.append(usage)
-                else:
-                    displayerror("Usage input is invalid. Please use a valid regular expression for usage filtering.")
-                    error = True
+            elif cmd == "search":
 
                 # Input consistency checks
-                if not error and not is_valid_time_interval(start_dt, end_dt):
+                if not is_valid_time_interval(args["start"], args["end"]):
                     displayerror("Time input is inconsistent. The end time must be later than the start time.")
-                    error = True
+                    print()
+                    continue
 
-                if not error:                
-                    print() if command_notice else None # Print a newline if there was a in-command notice
-
-                    connection.create_function("in_interval", 4, sql_is_in_time_interval)
-                    connection.create_function("regex", 2, sql_regex_match)
-                            
-                    query = f"SELECT * FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"} AND in_interval(?, ?, start, end) AND regex(?, usage) ORDER BY strftime('%F %R', start), roomID"
-
-                    actual_bookings = connection.execute(query, params).fetchall()
-
-                    if actual_bookings:
-                        displaysuccess("Bookings found:")
-                        display_table(
-                            ["Booking ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
-                            [10, 10, 20, 20, 20, 0],
-                            *actual_bookings
-                        )
-                    else:
-                        displaysuccess("No bookings found. The time slot is free.")
-
-                connection.commit()
-                connection.close()
-
-            elif args[0] == "show":
-
-                # Extract input
-                booking_ids = args[1].split(',')
-
-                connection = sqlite3.connect(DB_PATH)
-
-                # Input validity checks & fetching results
-                if booking_ids[0] == '*':
-                    actual_bookings = connection.execute("SELECT * FROM bookings").fetchall()
+                # Constructing query parameters with non-fatal dynamic input validity check using stored data
+                params = []
+                if args["roomIDs"][0] != '*':
+                    actual_room_ids = [room for room in args["roomIDs"] if connection.execute("SELECT 0 FROM rooms WHERE id=?", [room]).fetchone() is not None or (command_notice := True) and displaywarning(f"Room '{room}' does not exist and is skipped.")]
+                    params.extend(actual_room_ids)
                 else:
-                    actual_bookings = []
-                    for booking_id in booking_ids:
+                    actual_room_ids = ['*']
+                if args["userIDs"][0] != '*':
+                    actual_user_ids = [user for user in args["userIDs"] if connection.execute("SELECT 0 FROM users WHERE username=?", [user]).fetchone() is not None or (command_notice := True) and displaywarning(f"User '{user}' does not exist and is skipped.")]
+                    params.extend(actual_user_ids)
+                else:
+                    actual_user_ids = ['*']
+                params.append(args["start"])
+                params.append(args["end"])
+                params.append(args["usage"])
+                
+                print() if command_notice else None # Print a newline if there was a in-command notice
+
+                connection.create_function("in_interval", 4, sql_is_in_time_interval)
+                connection.create_function("regex", 2, sql_regex_match)
+
+                query = f"SELECT * FROM bookings WHERE {'roomID IN (' + ','.join('?' for _ in actual_room_ids) + ')' if actual_room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in actual_user_ids)+')' if actual_user_ids[0] != '*' else "TRUE"} AND in_interval(?, ?, start, end) AND regex(?, usage) ORDER BY strftime('%F %R', start), roomID"
+
+                result_bookings = connection.execute(query, params).fetchall()
+
+                if result_bookings:
+                    displaysuccess("Bookings found:")
+                    display_table(
+                        ["Booking ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
+                        [10, 10, 20, 20, 20, 0],
+                        *result_bookings
+                    )
+                else:
+                    displaysuccess("No bookings found. The time slot is free.")
+
+            elif cmd == "show":
+
+                # Fetching results with non-fatal dynamic input validity check using stored data
+                if args["bookingIDs"][0] == '*':
+                    result_bookings = connection.execute("SELECT * FROM bookings").fetchall()
+                else:
+                    result_bookings = []
+                    for booking_id in args["bookingIDs"]:
                         booking = connection.execute("SELECT * FROM bookings WHERE id=?", [booking_id]).fetchone()
                         if booking is None:
                             displaywarning(f"Booking ID '{booking_id}' does not exist and is skipped.")
                             command_notice = True
                             continue
-                        actual_bookings.append(booking)
-
-                connection.commit()
-                connection.close()
+                        result_bookings.append(booking)
 
                 print() if command_notice else None # Print a newline if there was a in-command notice
 
-                if actual_bookings:
+                if result_bookings:
                     displaysuccess("Bookings found:")
                     display_table(
                         ["Booking ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
                         [10, 10, 20, 20, 20, 0],
-                        *actual_bookings
+                        *result_bookings
                     )
                 else:
                     displayerror("No bookings found.")
 
-            elif args[0] == "book":
+            elif cmd == "book":
+                
+                connection.execute("BEGIN EXCLUSIVE") # Start an exclusive transaction to prevent other users from modifying the database after validative searching
+                connection.create_function("in_interval", 4, sql_is_in_time_interval)
 
-                # Extract input
-                room_ids = args[1].split(',')
-                start = args[2]
-                end = args[3]
-                usage = args[4]
-                actual_room_ids = []
+                # Input consistency checks
+                if not is_valid_time_interval(args["start"], args["end"]):
+                    displayerror("Time input is inconsistent. The end time must be later than the start time.")
+                    print()
+                    continue
 
-                connection = sqlite3.connect(DB_PATH)
-                connection.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
-                connection.execute("BEGIN EXCLUSIVE")
-
-                # Input validity checks
-                if (start_dt := parse_time(start)) is not None:
-                    params.append(start_dt.strftime('%Y-%m-%d %H:%M'))
-                else:
-                    displayerror("Start time input is invalid. Refer to the manual for more information.")
-                    error = True
-                if (end_dt := parse_time(end, allow_now=False)) is not None:
-                    params.append(end_dt.strftime('%Y-%m-%d %H:%M'))
-                else:
-                    displayerror("End time input is invalid. Refer to the manual for more information.")
-                    error = True
-                if sql_regex_match(usage) is not None:
-                    params.append(usage)
-                else:
-                    displayerror("Usage input is invalid. Please use a valid regular expression for usage filtering.")
-                    error = True
-
-                if isadmin or is_valid_time_interval(now, start, allow_equal=True):
-                    if is_valid_time_interval(start, end):
-                        if len(usage) > 0:
-
-                            connection.create_function("in_interval", 4, sql_is_in_time_interval)
-
-                            for room_id in room_ids:
-                                if connection.execute("SELECT id FROM rooms WHERE id=?", [room_id]).fetchone() is None:
-                                    displaywarning(f"Room '{room_id}' does not exist and is skipped.")
-                                    command_notice = True
-                                    continue
-
-                                booked = connection.execute(f"SELECT id FROM bookings WHERE roomID = ? AND in_interval(?, ?, start, end)", (room_id, start, end)).fetchone()
-
-                                if booked is not None:
-                                    displaywarning(f"Time slot is occupied (Booking ID: {booked[0]}) for room {room_id} and is skipped.")
-                                    command_notice = True
-                                    continue
-
-                                actual_room_ids.append(room_id)
-                                connection.execute("INSERT INTO bookings (roomID, username, start, end, usage) VALUES (?, ?, strftime('%F %R', ?), strftime('%F %R', ?), ?)", (room_id, currentuser, start, end, usage))
-
-                            print() if command_notice else None # Print a newline if there was a in-command notice
-
-                            if actual_room_ids:
-                                displaysuccess(f"Booking(s) for the following room(s) created successfully:")
-                                display_table(
-                                    ["Room ID"],
-                                    [10],
-                                    *[[room_id] for room_id in actual_room_ids]
-                                )
-                            else:
-                                displayerror("No bookings were created. Please check the time slot and room IDs.")
-                            
-                        else:
-                            displayerror("Usage cannot be empty. Please provide a description of the booking.")
-                    else:
-                        displayerror("Invalid time input. Either the end time is not later than the start time, or the time format is incorrect. Refer to the manual for more information.")
-                else:
+                # Dynamic input validity check using stored data
+                if not isadmin and not is_valid_time_interval(get_current_submission_time(), args["start"], allow_equal=True):
                     displayerror("Standard user cannot set start time in the past. Please use a future time or 'now'.")
+                    print()
+                    continue
 
-                connection.commit()
-                connection.close()
-
-            elif args[0] == "modify":
-
-                booking_ids = args[1].split(',')
-                usage = args[2]
-                actual_booking_ids = []
-
-                if len(usage) != 0:
-
-                    connection = sqlite3.connect(DB_PATH)
-                    # No exclusive lock as even if the user is deleted or the password is changed on the fly, data integrity and consistency are still maintained, without any errors occurring.
-
-                    for booking_id in booking_ids:
-                        booking = connection.execute("SELECT username, start FROM bookings WHERE id=?", [booking_id]).fetchone()
-                        if booking is None:
-                            displaywarning(f"Booking ID '{booking_id}' does not exist and is skipped.")
-                            command_notice = True
-                            continue
-                        if booking[0] != currentuser and not isadmin:
-                            displaywarning(f"You can only modify your own bookings as a standard user. Booking ID '{booking_id}' is skipped.")
-                            command_notice = True
-                            continue
-                        if not (isadmin or is_valid_time_interval(datetime.now().strftime('%Y-%m-%d %H:%M'), booking[1], allow_equal=True)):
-                            displaywarning(f"Booking ID '{booking_id}' is in the past and cannot be modified by a standard user.")
-                            command_notice = True
-                            continue
-                        actual_booking_ids.append(booking_id)
-                        connection.execute("UPDATE bookings SET usage=? WHERE id=?", (usage, booking_id))
-
-                    print() if command_notice else None # Print a newline if there was a in-command notice
-
-                    if actual_booking_ids:
-                        displaysuccess(f"The following bookings are modified successfully:")
-                        display_table(
-                            ["Booking ID"],
-                            [10],
-                            *[[booking_id] for booking_id in actual_booking_ids]
-                        )
-                    else:
-                        displayerror("No bookings were modified. Please check the booking IDs.")
-
-                    connection.commit()
-                    connection.close()
-
-                else:
-                    displayerror("Usage cannot be empty. Please provide a description of the booking.")
-
-            elif args[0] == "cancel":
-
-                booking_ids = args[1].split(',')
-                actual_booking_ids = []
-
-                connection = sqlite3.connect(DB_PATH)
-                # No exclusive lock as even if the user is deleted or the password is changed on the fly, data integrity and consistency are still maintained, without any errors occurring.
-
-                for booking_id in booking_ids:
-                    booking = connection.execute("SELECT username, start FROM bookings WHERE id=?", [booking_id]).fetchone()
-                    if booking is None:
-                        displaywarning(f"Booking ID '{booking_id}' does not exist and is skipped.")
+                # Doing actions with non-fatal dynamic input validity check using stored data
+                result_bookings = []
+                for room_id in args["roomIDs"]:
+                    if connection.execute("SELECT 0 FROM rooms WHERE id=?", [room_id]).fetchone() is None:
+                        displaywarning(f"Room '{room_id}' does not exist and is skipped.")
                         command_notice = True
                         continue
-                    if booking[0] != currentuser and not isadmin:
-                        displaywarning(f"You can only cancel your own bookings as a standard user. Booking ID '{booking_id}' is skipped.")
+                    if (result_bookedbooking := connection.execute(f"SELECT id FROM bookings WHERE roomID = ? AND in_interval(?, ?, start, end)", (room_id, args["start"], args["end"])).fetchone()) is not None:
+                        displaywarning(f"Time slot is occupied (Booking ID: {result_bookedbooking[0]}) for room {room_id} and is skipped.")
                         command_notice = True
                         continue
-                    if not (isadmin or is_valid_time_interval(datetime.now().strftime('%Y-%m-%d %H:%M'), booking[1], allow_equal=True)):
-                        displaywarning(f"Booking ID '{booking_id}' is in the past and cannot be cancelled by a standard user.")
-                        command_notice = True
-                        continue
-                    actual_booking_ids.append(booking_id)
-                    connection.execute("DELETE FROM bookings WHERE id=?", [booking_id])
 
-                connection.commit()
-                connection.close()
+                    connection.execute("INSERT INTO bookings (roomID, username, start, end, usage) VALUES (?, ?, strftime('%F %R', ?), strftime('%F %R', ?), ?)", (room_id, currentuser, args["start"], args["end"], args["usage"]))
+                    connection.commit() # Commit the addition to the database before fetching the booking record
+                    result_bookings.append(connection.execute("SELECT * FROM bookings WHERE ID = (SELECT seq FROM sqlite_sequence WHERE name = 'bookings')").fetchone()) # Fetch the newly added booking
 
                 print() if command_notice else None # Print a newline if there was a in-command notice
 
-                if actual_booking_ids:
-                    displaysuccess(f"The following bookings are cancelled successfully:")
+                if result_bookings:
+                    displaysuccess("Booking(s) below created successfully:")
                     display_table(
-                        ["Booking ID"],
-                        [10],
-                        *[[booking_id] for booking_id in actual_booking_ids]
+                        ["Booking ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
+                        [10, 10, 20, 20, 20, 0],
+                        *result_bookings
+                    )
+                else:
+                    displayerror("No bookings were created.")
+
+            elif cmd == "modify":
+
+                # No exclusive lock as even if the booking is deleted or modified on the fly, data integrity and consistency are still maintained, without any errors occurring.
+
+                # Doing actions with non-fatal dynamic input validity check using stored data
+                result_bookings = []
+                for booking_id in args["bookingIDs"]:
+                    result_booking = connection.execute("SELECT username, start FROM bookings WHERE id=?", [booking_id]).fetchone()
+                    if result_booking is None:
+                        displaywarning(f"Booking ID '{booking_id}' does not exist and is skipped.")
+                        command_notice = True
+                        continue
+                    if result_booking[0] != currentuser and not isadmin:
+                        displaywarning(f"You can only modify your own bookings as a standard user. Booking ID '{booking_id}' is skipped.")
+                        command_notice = True
+                        continue
+                    if not isadmin and not is_valid_time_interval(get_current_submission_time(), result_booking[1], allow_equal=True):
+                        displaywarning(f"Booking ID '{booking_id}' is in the past and cannot be modified by a standard user.")
+                        command_notice = True
+                        continue
+
+                    connection.execute("UPDATE bookings SET usage=? WHERE id=?", (args["usage"], booking_id))
+                    connection.commit() # Commit the modification to the database before fetching the booking record
+                    result_bookings.append(connection.execute("SELECT * FROM bookings WHERE id=?", [booking_id]).fetchone()) # Fetch the modified booking
+
+                print() if command_notice else None # Print a newline if there was a in-command notice
+
+                if result_bookings:
+                    displaysuccess("The following bookings are modified as below successfully:")
+                    display_table(
+                        ["Booking ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
+                        [10, 10, 20, 20, 20, 0],
+                        *result_bookings
+                    )
+                else:
+                    displayerror("No bookings were modified.")
+
+            elif cmd == "cancel":
+
+                # No exclusive lock as even if the user is deleted or the password is changed on the fly, data integrity and consistency are still maintained, without any errors occurring.
+
+                # Doing actions with non-fatal dynamic input validity check using stored data
+                result_bookings = []
+                for booking_id in args["bookingIDs"]:
+                    result_booking = connection.execute("SELECT username, start FROM bookings WHERE id=?", [booking_id]).fetchone()
+                    if result_booking is None:
+                        displaywarning(f"Booking ID '{booking_id}' does not exist and is skipped.")
+                        command_notice = True
+                        continue
+                    if result_booking[0] != currentuser and not isadmin:
+                        displaywarning(f"You can only cancel your own bookings as a standard user. Booking ID '{booking_id}' is skipped.")
+                        command_notice = True
+                        continue
+                    if not isadmin and not is_valid_time_interval(get_current_submission_time(), result_booking[1], allow_equal=True):
+                        displaywarning(f"Booking ID '{booking_id}' is in the past and cannot be cancelled by a standard user.")
+                        command_notice = True
+                        continue
+
+                    result_bookings.append(connection.execute("SELECT * FROM bookings WHERE id=?", [booking_id]).fetchone()) # Fetch the booking before deletion
+                    connection.execute("DELETE FROM bookings WHERE id=?", [booking_id])
+
+                print() if command_notice else None # Print a newline if there was a in-command notice
+
+                if result_bookings:
+                    displaysuccess("The following bookings are cancelled successfully:")
+                    display_table(
+                        ["Booking ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
+                        [10, 10, 20, 20, 20, 0],
+                        *result_bookings
                     )
                 else:
                     displayerror("No bookings were cancelled.")
 
-            elif args[0] == "clear":
+            elif cmd == "clear":
 
-                room_ids = args[1].split(',')
-                user_ids = args[2].split(',')
-                start = args[3]
-                end = args[4]
-                usage = args[5]
+                if (args["roomIDs"][0] == '*' or args["usernames"][0] == '*' or args["start"] == '*' or args["end"] == '*') and input("You are using wildcard '*' in one or more arguments. This will cancel bookings massively. Are you sure you want to proceed? Enter 'yes' to confirm: ").lower() == "yes":
 
-                if "*" not in (room_ids, user_ids, start, end) or input("You are using wildcard '*' in one or more arguments. This will cancel bookings massively. Are you sure you want to proceed? Enter 'yes' to confirm: ").lower() == "yes":
+                    # Input consistency checks
+                    if not is_valid_time_interval(args["start"], args["end"]):
+                        displayerror("Time input is inconsistent. The end time must be later than the start time.")
+                        print()
+                        continue
 
-                    actual_booking_ids = []
-
-                    connection = sqlite3.connect(DB_PATH)
-                    # No exclusive lock as even if the user is deleted or the password is changed on the fly, data integrity and consistency are still maintained, without any errors occurring.
-
+                    # Constructing query parameters with non-fatal dynamic input validity check using stored data
                     params = []
-                    if room_ids[0] != '*':
-                        room_ids = [room for room in room_ids if connection.execute("SELECT id FROM rooms WHERE id=?", [room]).fetchone() is not None or displaywarning(f"Room '{room}' does not exist and is skipped.") and (command_notice := True)]
-                        params.extend(room_ids)
-                    if user_ids[0] != '*':
-                        user_ids = [user for user in user_ids if connection.execute("SELECT username FROM users WHERE username=?", [user]).fetchone() is not None or displaywarning(f"User '{user}' does not exist and is skipped.") and (command_notice := True)]
-                        params.extend(user_ids)
-                    now = datetime.now().strftime('%Y-%m-%d %H:%M')
-                    if start != '*':
-                        if start == 'now':
-                            start = now
-                            displayinfo(f"Using current time {start} as start time.")
-                            command_notice = True
-                        params.append(start)
-                    if end != '*':
-                        if end == 'now':
-                            end = now
-                            displayinfo(f"Using current time {end} as end time.")
-                            command_notice = True
-                        params.append(end)
-                    params.append(usage)
-
-                    if isadmin or is_valid_time_interval(now, start, allow_equal=True):
-                        if is_valid_time_interval(start, end, allow_wildcard=True):
-                            if sql_regex_match(usage) is not None:
-
-                                connection.create_function("in_interval", 4, sql_is_in_time_interval)
-                                connection.create_function("regex", 2, sql_regex_match)
-
-                                query = f"SELECT id, username FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in room_ids)+')' if not room_ids or room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in user_ids)+')' if not user_ids or user_ids[0] != '*' else "TRUE"} AND {'in_interval(?, ?, start, end)' if start != '*' and end != '*' else "TRUE"} AND regex(?, usage)"
-
-                                bookings = connection.execute(query, params).fetchall()
-
-                                if bookings:
-                                    for booking in bookings:
-                                        if booking[1] != currentuser and not isadmin:
-                                            displaywarning(f"You can only clear your own bookings as a standard user. Booking ID '{booking[0]}' is skipped.")
-                                            command_notice = True
-                                            continue
-                                        actual_booking_ids.append(str(booking[0]))
-                                        connection.execute("DELETE FROM bookings WHERE id=?", [booking[0]])
-
-                                print() if command_notice else None # Print a newline if there was a in-command notice
-
-                                if actual_booking_ids:
-                                    displaysuccess(f"The following bookings are cleared successfully:")
-                                    display_table(
-                                        ["Booking ID"],
-                                        [10],
-                                        *[[booking_id] for booking_id in actual_booking_ids]
-                                    )
-                                else:
-                                    displayerror("No bookings were cleared.")
-
-                            else:
-                                displayerror("Usage input is invalid. Please use a valid regular expression for usage filtering.")
-                        else:
-                            displayerror("Invalid time input. Either the end time is not later than the start time, or the time format is incorrect. Refer to the manual for more information.")
+                    command_notice = False
+                    actual_room_ids = args["roomIDs"]
+                    actual_usernames = args["usernames"]
+                    if actual_room_ids[0] != '*':
+                        actual_room_ids = [room for room in actual_room_ids if connection.execute("SELECT 0 FROM rooms WHERE id=?", [room]).fetchone() is not None or (command_notice := True) and displaywarning(f"Room '{room}' does not exist and is skipped.")]
+                        params.extend(actual_room_ids)
                     else:
-                        displayerror("Clearing past bookings is not allowed for a standard user. Please use a future time or 'now' as start time.")
+                        actual_room_ids = ['*']
+                    if actual_usernames[0] != '*':
+                        actual_usernames = [user for user in actual_usernames if connection.execute("SELECT 0 FROM users WHERE username=?", [user]).fetchone() is not None or (command_notice := True) and displaywarning(f"User '{user}' does not exist and is skipped.")]
+                        params.extend(actual_usernames)
+                    else:  
+                        actual_usernames = ['*']
+                    params.append(args["start"])
+                    params.append(args["end"])
+                    params.append(args["usage"])
 
-                    connection.commit()
-                    connection.close()
+                    print() if command_notice else None # Print a newline if there was a in-command notice
+
+                    connection.create_function("in_interval", 4, sql_is_in_time_interval)
+                    connection.create_function("regex", 2, sql_regex_match)
+
+                    query = f"SELECT * FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in actual_room_ids)+')' if actual_room_ids[0] != '*' else 'TRUE'} AND {'username IN ('+','.join('?' for _ in actual_usernames)+')' if actual_usernames[0] != '*' else 'TRUE'} AND in_interval(?, ?, start, end) AND regex(?, usage)"
+
+                    bookings = connection.execute(query, params).fetchall()
+
+                    # Doing actions with non-fatal dynamic input validity check using stored data
+                    result_bookings = []
+                    for booking in bookings:
+                        if booking[2] != currentuser and not isadmin:
+                            displaywarning(f"You can only clear your own bookings as a standard user. Booking ID '{booking[0]}' is skipped.")
+                            command_notice = True
+                            continue
+                        result_bookings.append(booking)
+
+                        connection.execute("DELETE FROM bookings WHERE id=?", [booking[0]])
+
+                    print() if command_notice else None # Print a newline if there was a in-command notice
+
+                    if result_bookings:
+                        displaysuccess("The following bookings are cancelled successfully:")
+                        display_table(
+                            ["Booking ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
+                            [10, 10, 20, 20, 20, 0],
+                            *result_bookings
+                        )
+                    else:
+                        displayerror("No bookings were cancelled.")
 
                 else:
                     displayerror("Clearing bookings cancelled.")
                 
             elif isadmin:
 
-                if args[0] == "reg":
+                if cmd == "reg":
 
-                    connection = sqlite3.connect(DB_PATH)
                     # No exclusive lock as even if the user is deleted or the password is changed on the fly, data integrity and consistency are still maintained, without any errors occurring.
 
-                    if connection.execute("SELECT username FROM users WHERE username=?", [args[1]]).fetchone() is not None:
-                        displayinfo(f"User '{args[1]}' already exists. Changing password.")
+                    # Non-fatal dynamic input validity check using stored data
+                    if connection.execute("SELECT username FROM users WHERE username=?", [args["username"]]).fetchone() is not None:
+                        displayinfo(f"User '{args['username']}' already exists. Changing password.")
                         command_notice = True
 
                     print() if command_notice else None # Print a newline if there was a in-command notice
 
                     pwhash = hash(inputpw("Password: ").encode()).digest()
-                    connection.execute("INSERT OR REPLACE users (username, pwhash) VALUES (?, ?)", (args[1], pwhash))
-                    displaysuccess(f"User '{args[1]}' registered successfully.")
-
-                    connection.commit()
-                    connection.close()
+                    connection.execute("INSERT OR REPLACE users (username, pwhash) VALUES (?, ?)", (args["username"], pwhash))
+                    displaysuccess(f"User '{args['username']}' registered or updated successfully.")
 
                 elif args[0] == "dereg":
 
-                    if input(f"Are you sure you want to deregister the users? Their bookings will be as well cancelled. Enter 'yes' to confirm: ").lower() == "yes":
+                    if input("Are you sure you want to deregister the users? Their bookings will be as well cancelled. Enter 'yes' to confirm: ").lower() == "yes":
 
-                        usernames = args[1].split(',')
-                        actual_usernames = []
-
-                        connection = sqlite3.connect(DB_PATH)
-                        connection.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
                         # No exclusive lock as even if the user is deleted or the password is changed on the fly, data integrity and consistency are still maintained, without any errors occurring.
 
-                        for username in usernames:
-                            if connection .execute("SELECT username FROM users WHERE username=?", [username]).fetchone() is None:
+                        # Doing actions with non-fatal dynamic input validity check using stored data
+                        result_usernames = []
+                        result_bookings = []
+                        for username in args["usernames"]:
+                            if connection.execute("SELECT username FROM users WHERE username=?", [username]).fetchone() is None:
                                 displaywarning(f"User '{username}' does not exist and is skipped.")
                                 command_notice = True
                                 continue
                             elif username == currentuser:
-                                displaywarning(f"You cannot deregister yourself. Please log in as another user first. Your username is skipped.")
+                                displaywarning("You cannot deregister yourself. Please log in as another user first. Your username is skipped.")
                                 command_notice = True
                                 continue
-                            actual_usernames.append(username)
+
+                            result_usernames.append([username])
+                            result_bookings.extend(connection.execute("SELECT * FROM bookings WHERE username=?", [username]).fetchall()) # Fetch the bookings before deletion
                             connection.execute("DELETE FROM bookings WHERE username=?", [username])
                             connection.execute("DELETE FROM users WHERE username=?", [username])
 
-                        connection.commit()
-                        connection.close()
-
                         print() if command_notice else None # Print a newline if there was a in-command notice
 
-                        if actual_usernames:
-                            displaysuccess(f"The following users are deregistered successfully:")
+                        if result_usernames:
+                            displaysuccess("The following users are deregistered and logged out successfully:")
                             display_table(
                                 ["Username"],
                                 [20],
-                                *[[username] for username in actual_usernames]
+                                *result_usernames
                             )
+                            if result_bookings:
+                                print() # Print a newline for better readability
+                                displaysuccess("The following bookings are cancelled due to user deregistration:")
+                                display_table(
+                                    ["Booking ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
+                                    [10, 10, 20, 20, 20, 0],
+                                    *result_bookings
+                                )
                         else:
                             displayerror("No users were deregistered.")
 
@@ -826,84 +834,73 @@ def main():
 
                 elif args[0] == "users":
 
-                    connection = sqlite3.connect(DB_PATH)
-                    users = connection.execute("SELECT * FROM users ORDER BY username").fetchall()
-                    connection.commit()
-                    connection.close()
+                    result_users = connection.execute("SELECT * FROM users ORDER BY username").fetchall()
 
-                    if users:
+                    if result_users:
                         displaysuccess("Users found:")
                         display_table(
                             ["Admin", "Username"],
                             [5, 0],
-                            *[["Yes" if user[1] else "No", user[0]] for user in users]
+                            *[[bool(user[1]), user[0]] for user in result_users]
                         )
                     else:
                         displaywarning("No users found. Please register users using the 'reg' command.")
 
                 elif args[0] == "build":
 
-                    room_ids = args[1].split(',')
-                    description = args[2]
-                    actual_room_ids = []
-
-                    connection = sqlite3.connect(DB_PATH)
                     # No exclusive lock as even if the user is deleted or the password is changed on the fly, data integrity and consistency are still maintained, without any errors occurring.
 
-                    for room_id in room_ids:
+                    # Doing actions with non-fatal dynamic input validity check using stored data
+                    result_room_ids = []
+                    for room_id in args["roomIDs"]:
                         if connection.execute("SELECT id FROM rooms WHERE id=?", [room_id]).fetchone() is not None:
                             displayinfo(f"Room '{room_id}' already exists, changing description.")
                             command_notice = True
-    
-                        actual_room_ids.append(room_id)
-                        connection.execute("INSERT OR REPLACE INTO rooms (id, description) VALUES (?, ?)", [room_id, description])
+
+                        result_room_ids.append([room_id])
+                        connection.execute("INSERT OR REPLACE INTO rooms (id, description) VALUES (?, ?)", [room_id, args["description"]])
 
                     connection.commit()
                     connection.close()
 
                     print() if command_notice else None # Print a newline if there was a in-command notice
 
-                    if actual_room_ids:
-                        displaysuccess(f"The following rooms are created successfully:")
+                    if result_room_ids:
+                        displaysuccess("The following rooms are created or updated successfully:")
                         display_table(
                             ["Room ID"],
                             [10],
-                            *[[room_id] for room_id in actual_room_ids]
+                            *result_room_ids
                         )
                     else:
                         displayerror("No rooms were created.")
 
                 elif args[0] == "destroy":
 
-                    if input(f"Are you sure you want to delete the rooms? Their bookings will be as well cancelled. Enter 'yes' to confirm: ").lower() == "yes":
+                    if input("Are you sure you want to delete the rooms? Their bookings will be as well cancelled. Enter 'yes' to confirm: ").lower() == "yes":
 
-                        room_ids = args[1].split(',')
-                        actual_room_ids = []
-
-                        connection = sqlite3.connect(DB_PATH)
-                        connection.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
                         # No exclusive lock as even if the user is deleted or the password is changed on the fly, data integrity and consistency are still maintained, without any errors occurring.
 
-                        for room_id in room_ids:
+                        # Doing actions with non-fatal dynamic input validity check using stored data
+                        result_room_ids = []
+                        for room_id in args["roomIDs"]:
                             if connection.execute("SELECT id FROM rooms WHERE id=?", [room_id]).fetchone() is None:
                                 displaywarning(f"Room '{room_id}' does not exist and is skipped.")
                                 command_notice = True
                                 continue
-                            actual_room_ids.append(room_id)
+
+                            result_room_ids.append([room_id])
                             connection.execute("DELETE FROM bookings WHERE roomID=?", [room_id])
                             connection.execute("DELETE FROM rooms WHERE id=?", [room_id])
 
-                        connection.commit()
-                        connection.close()
-
                         print() if command_notice else None # Print a newline if there was a in-command notice
 
-                        if actual_room_ids:
-                            displaysuccess(f"The following rooms are deleted successfully:")
+                        if result_room_ids:
+                            displaysuccess("The following rooms are deleted successfully:")
                             display_table(
                                 ["Room ID"],
                                 [10],
-                                *[[room_id] for room_id in actual_room_ids]
+                                *result_room_ids
                             )
                         else:
                             displayerror("No rooms were deleted.")
@@ -912,25 +909,18 @@ def main():
                         displayerror("Deletion cancelled.")
                 
                 elif args[0] == "sql":
-
-                    connection = sqlite3.connect(DB_PATH)
-                    connection.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
                     
-                    cursor = connection.cursor()
                     try:
-                        result = cursor.execute(args[1]).fetchall()
+                        result = connection.execute(args[1]).fetchall()
                     except sqlite3.Error as e:
                         displayerror(f"Error executing SQL query:\n{e}")
                     else:
                         displaysuccess("SQL query executed successfully:")
                         display_table(
-                            [description[0] for description in cursor.description],
-                            [25 for _ in range(len(cursor.description))],
+                            [description[0] for description in connection.description],
+                            [25 for _ in range(len(connection.description))],
                             *result
                         )
-
-                    connection.commit()
-                    connection.close()
 
         print() # Print a newline for better readability
 
@@ -945,7 +935,6 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         displayerror("Program terminated due to user keyboard interrupt (Ctrl+C).")
         print() # Print a newline for better readability
-        raise SystemExit(1)
     except:
         from datetime import datetime
         from traceback import format_exc
@@ -954,8 +943,10 @@ if __name__ == "__main__":
         print() # Print a newline for better readability
         with open(Path(__file__).resolve().parent/"error.log", "a") as f:
             f.write(str(datetime.now())+"\n"+format_exc()+"\n\n\n")
+    finally:
+        # Rollback of any uncommitted changes in the current cycle to the database will be done automatically on exit
+        raise SystemExit(1) # Exit the program with a non-zero exit code to indicate an error
 
-        raise SystemExit(1)
 else:
     displayerror("Booker cannot be imported as a module.")
     print() # Print a newline for better readability
