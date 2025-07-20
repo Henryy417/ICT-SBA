@@ -45,10 +45,11 @@ def main():
     from hashlib import sha3_512 as hash
     from os import system as sysexec, name as sysname
     from re import compile as regex_compile, error as regex_error
-    from shlex import shlex
+    from shlex import shlex, split as shellsplit
     class QuotingShlex(shlex):
         def __init__(self, data, **kwargs):
             super().__init__(data, **kwargs)
+            self.wordchars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_~-./*?=!#$%&()*+,-./:;<=>?@[\\]^_`{|}~'
             self.quoted = False
 
         def get_token(self):
@@ -178,8 +179,8 @@ def main():
             "args": {
                 "roomIDs": {"format": "csv", "substitutions": {"*": "*"}},
                 "usernames": {"format": "csv", "substitutions": {"*": "*"}},
-                "start": {"format": "time", "substitutions": {"*": "*"}},
-                "end": {"format": "time", "substitutions": {"*": "*"}},
+                "start": {"format": "time", "substitutions": {"*": datetime.min.strftime('%Y-%m-%d %H:%M')}},
+                "end": {"format": "time", "substitutions": {"*": datetime.max.strftime('%Y-%m-%d %H:%M')}},
                 "usage": {"format": "regex", "default": ""}
             },
             "help": "Cancel bookings to make available the specified rooms booked by specified users within a given time. Usage can be filtered using a regular expression. Standard users can only clear their own future bookings.",
@@ -265,14 +266,17 @@ def main():
         if len(raw) == 0:
             continue
 
-        current_submission_time = datetime.now().strftime('%Y-%m-%d %H:%M') # NEVER USE THIS DIRECTLY, USE get_current_submission_time() INSTEAD!
-        # Initialize the parser
+        # Check if input can be parsed correctly
         try:
-            container = QuotingShlex(raw, posix=True, punctuation_chars=True) # Use posix=True to enable POSIX shell-like parsing, punctuation_chars to allow hyphens in words
+            shellsplit(raw)
         except ValueError:
             displayerror("Invalid input. Looks like you forget a closing quote somewhere, or escape characters are not used properly.\nQuotes and backslashes, when used literally, should be escaped with a backslash (\\). Escaping character is not available in single quotes.")
             print() # Print a newline for better readability
             continue
+
+        current_submission_time = datetime.now().strftime('%Y-%m-%d %H:%M') # NEVER USE THIS DIRECTLY, USE get_current_submission_time() INSTEAD!
+
+        container = QuotingShlex(raw, posix=True) # Initialize the parser
 
         cmd = container.get_token()
 
@@ -288,7 +292,6 @@ def main():
                 continue
             elif len(possiblecmds) == 1:
                 cmd = possiblecmds[0]
-                displayinfo(f"Command abbreviation interpreted as '{possiblecmds[0]}'.")
             else:
                 displayerror(f"Command abbreviation '{cmd}' is ambiguous. Which of the following commands did you mean: {', '.join(possiblecmds)}?")
                 print() # Print a newline for better readability
@@ -349,7 +352,6 @@ def main():
 
         if len(unchecked_args["named"]) > 0 or len(unchecked_args["positional"]) > 0:
             displaywarning(f"More arguments passed than needed.")
-            print()
 
         # Fill substitutions for arguments
         for arg, value in args.items():
@@ -395,7 +397,7 @@ def main():
         if exit_loop:
             continue
 
-        displayinfo(f"Executing: {cmd + (' ' + ' '.join(f'--{k} "{v}"' for k, v in args.items()) if args else '')}")
+        displayinfo(f"Executing: {cmd + (' ' + ' '.join(f'--{k} "{",".join(v) if isinstance(v, list) else v}"' for k, v in args.items()) if args else '')}")
 
         print() # Print a newline for better readability
 
@@ -408,6 +410,7 @@ def main():
 
             print("Use 'man' to receive more information about a specific command.")
             print("Each word is separated by a space. If you want to use spaces in a single word, please quote the argument with single or double quotes. Escaping characters is not allowed in single quotes.")
+            print("If you want to use characters that are not ASCII printable characters (excluding whitespace), please also quote them.")
             print("Command abbreviations are allowed. Enter the first few letters of a command. Note that the parser tries to see the input as a complete command before seeking a possible abbreviation.")
             print("After entering a command, add a space then the arguments if arguments are required.\n")
             print("Arguments can be either named or positional. For named arguments, input double hyphen '--' followed the argument name in the same word, and then the argument value as another. Quote the word if you want to have '--' at the beginning literally. For positional arguments, input the value directly as a word. They will be taken as the the first unfilled argument in the command.")
@@ -440,7 +443,7 @@ def main():
                 if 'args' in available_commands[args["command"]]:
                     syntax_text += ' '
                     for arg, prop in available_commands[args["command"]]["args"].items():
-                        syntax_text += f"[{prop['format']}{('|' + '|'.join(prop['substitution'])) if 'substitution' in prop else ''}{"="+prop['default'] if 'default' in prop else ''}] " # Syntax for each argument
+                        syntax_text += f"[{arg}({prop['format']}{('|' + '|'.join(prop['substitutions'])) if 'substitutions' in prop else ''}){('="' + prop['default'] + '"') if 'default' in prop else ''}] " # Syntax for each argument
                 print(syntax_text.strip())
                 print("\nDescription:")
                 print(available_commands[args["command"]]['help'])
@@ -482,7 +485,7 @@ def main():
             result_user = connection.execute("SELECT isadmin FROM users WHERE username=? AND pwhash=?", (args["username"], pwhash)).fetchone()
 
             if result_user is not None:
-                currentuser = args[1]
+                currentuser = args["username"]
                 isadmin = result_user[0] == 1
                 update_available_commands()
                 displaysuccess(f"Logged in as '{currentuser}'.")
@@ -531,8 +534,8 @@ def main():
                     params.extend(actual_room_ids)
                 else:
                     actual_room_ids = ['*']
-                if args["userIDs"][0] != '*':
-                    actual_user_ids = [user for user in args["userIDs"] if connection.execute("SELECT 0 FROM users WHERE username=?", [user]).fetchone() is not None or (command_notice := True) and displaywarning(f"User '{user}' does not exist and is skipped.")]
+                if args["usernames"][0] != '*':
+                    actual_user_ids = [user for user in args["usernames"] if connection.execute("SELECT 0 FROM users WHERE username=?", [user]).fetchone() is not None or (command_notice := True) and displaywarning(f"User '{user}' does not exist and is skipped.")]
                     params.extend(actual_user_ids)
                 else:
                     actual_user_ids = ['*']
@@ -552,7 +555,7 @@ def main():
                 if result_bookings:
                     displaysuccess("Bookings found:")
                     display_table(
-                        ["Booking ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
+                        ["ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
                         [10, 10, 20, 20, 20, 0],
                         *result_bookings
                     )
@@ -579,7 +582,7 @@ def main():
                 if result_bookings:
                     displaysuccess("Bookings found:")
                     display_table(
-                        ["Booking ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
+                        ["ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
                         [10, 10, 20, 20, 20, 0],
                         *result_bookings
                     )
@@ -624,7 +627,7 @@ def main():
                 if result_bookings:
                     displaysuccess("Booking(s) below created successfully:")
                     display_table(
-                        ["Booking ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
+                        ["ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
                         [10, 10, 20, 20, 20, 0],
                         *result_bookings
                     )
@@ -661,7 +664,7 @@ def main():
                 if result_bookings:
                     displaysuccess("The following bookings are modified as below successfully:")
                     display_table(
-                        ["Booking ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
+                        ["ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
                         [10, 10, 20, 20, 20, 0],
                         *result_bookings
                     )
@@ -697,7 +700,7 @@ def main():
                 if result_bookings:
                     displaysuccess("The following bookings are cancelled successfully:")
                     display_table(
-                        ["Booking ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
+                        ["ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
                         [10, 10, 20, 20, 20, 0],
                         *result_bookings
                     )
@@ -758,7 +761,7 @@ def main():
                     if result_bookings:
                         displaysuccess("The following bookings are cancelled successfully:")
                         display_table(
-                            ["Booking ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
+                            ["ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
                             [10, 10, 20, 20, 20, 0],
                             *result_bookings
                         )
@@ -785,7 +788,7 @@ def main():
                     connection.execute("INSERT OR REPLACE users (username, pwhash) VALUES (?, ?)", (args["username"], pwhash))
                     displaysuccess(f"User '{args['username']}' registered or updated successfully.")
 
-                elif args[0] == "dereg":
+                elif cmd == "dereg":
 
                     if input("Are you sure you want to deregister the users? Their bookings will be as well cancelled. Enter 'yes' to confirm: ").lower() == "yes":
 
@@ -822,7 +825,7 @@ def main():
                                 print() # Print a newline for better readability
                                 displaysuccess("The following bookings are cancelled due to user deregistration:")
                                 display_table(
-                                    ["Booking ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
+                                    ["ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
                                     [10, 10, 20, 20, 20, 0],
                                     *result_bookings
                                 )
@@ -832,7 +835,7 @@ def main():
                     else:
                         displayerror("Deregistration cancelled.")
 
-                elif args[0] == "users":
+                elif cmd == "users":
 
                     result_users = connection.execute("SELECT * FROM users ORDER BY username").fetchall()
 
@@ -846,7 +849,7 @@ def main():
                     else:
                         displaywarning("No users found. Please register users using the 'reg' command.")
 
-                elif args[0] == "build":
+                elif cmd == "build":
 
                     # No exclusive lock as even if the user is deleted or the password is changed on the fly, data integrity and consistency are still maintained, without any errors occurring.
 
@@ -875,7 +878,7 @@ def main():
                     else:
                         displayerror("No rooms were created.")
 
-                elif args[0] == "destroy":
+                elif cmd == "destroy":
 
                     if input("Are you sure you want to delete the rooms? Their bookings will be as well cancelled. Enter 'yes' to confirm: ").lower() == "yes":
 
@@ -908,10 +911,10 @@ def main():
                     else:
                         displayerror("Deletion cancelled.")
                 
-                elif args[0] == "sql":
+                elif cmd == "sql":
                     
                     try:
-                        result = connection.execute(args[1]).fetchall()
+                        result = connection.execute(args["query"]).fetchall()
                     except sqlite3.Error as e:
                         displayerror(f"Error executing SQL query:\n{e}")
                     else:
