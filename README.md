@@ -1,4 +1,4 @@
-# Booker v1.0 Documentation
+# Booker v2.0 Documentation
 
 ## Overview
 Booker is a command-line room booking system for managing users, rooms, and bookings. It supports user authentication, admin operations, and flexible search and management of bookings.
@@ -63,9 +63,10 @@ These are the currently available commands in Booker:
 | clear     | Cancel bookings with filters                  |
 
 ## Arguments & Formats
-- **csv**: Comma-separated values (e.g., `room1,room2`)
-- **time**: Format `YYYY-MM-DD HH:MM` or `now`
-- **text**: Free text without special formatting
+- **csv**: Comma-separated values that are not empty (e.g., `room1,room2`)
+- **time**: Format `YYYY-MM-DD HH:MM` or `now` sometimes
+- **text**: Free text that is not empty without special formatting
+- **regex**: Regular expression pattern for flexible matching
 > Note: Some arguments accept a wildcard (`*`) for flexible matching.
 
 ## Error Handling
@@ -79,38 +80,6 @@ These are the currently available commands in Booker:
 ## Data Storage
 If you run Booker from Python script, the files will be stored in the same directory as the script.
 If you run it as an executable, the files will be stored in the `_internal` directory next to the executable.
-
-## Example Usage: Setting up Booker
-```
-> l admin
-Command abbreviation interpreted as 'login'.
-
-Password:
-Logged in as 'admin'.
-
-admin> bu room1 "Conference Room"   
-Command abbreviation interpreted as 'build'.
-
-The following rooms are created successfully:
-room1
-
-admin> bo room1 "2025-07-14 09:00" "2025-07-14 10:00" Meeting
-Command abbreviation interpreted as 'book'.
-
-Booking(s) for the following room(s) created successfully:
-room1
-
-admin> se room1 * now * Meeting
-Command abbreviation interpreted as 'search'.
-
-Using current time 2025-07-13 23:09 as start time.
-
-Bookings found:
-Booking ID     Room ID   User                     Start Time               End Time                 Usage
----            ---       ---                      ---                      ---                      ---
-1              room1     admin                    2025-07-14 09:00         2025-07-14 10:00         Meeting
-```
-> Note: The default user is `admin` with password `admin`, created automatically on first run.
 
 ## License
 This project is licensed under the MIT License by Chen Hang Tsz Henry. See the [LICENSE](LICENSE) file for details.
