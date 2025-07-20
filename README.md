@@ -12,7 +12,7 @@ Booker is a command-line room booking system for managing users, rooms, and book
 - Search and show bookings with flexible filters
 - Raw SQL query execution
 
-## Suage
+## Usage
 ### Getting Started
 1. To use it on your computer, run the script as a standalone program:
     ```bash
