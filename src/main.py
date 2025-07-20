@@ -44,9 +44,9 @@ def main():
     from getpass import getpass as inputpw
     from hashlib import sha3_512 as hash
     from os import system as sysexec, name as sysname
-    from re import compile as regex_compile, error as regex_error
+    from re import compile as regex_compile, PatternError as RegexCompileError
     from shlex import shlex, split as shellsplit
-    class QuotingShlex(shlex):
+    class realshlex(shlex):
         def __init__(self, data, **kwargs):
             super().__init__(data, **kwargs)
             self.wordchars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_~-./*?=!#$%&()*+,-./:;<=>?@[\\]^_`{|}~'
@@ -107,7 +107,7 @@ def main():
             "use_requirement": "admin"
         },
         "dereg": {
-            "args": {"username": {"format": "csv"}},
+            "args": {"usernames": {"format": "csv"}},
             "help": "Deregister users.",
             "use_requirement": "admin"
         },
@@ -276,7 +276,7 @@ def main():
 
         current_submission_time = datetime.now().strftime('%Y-%m-%d %H:%M') # NEVER USE THIS DIRECTLY, USE get_current_submission_time() INSTEAD!
 
-        container = QuotingShlex(raw, posix=True) # Initialize the parser
+        container = realshlex(raw, posix=True) # Initialize the parser
 
         cmd = container.get_token()
 
@@ -376,7 +376,7 @@ def main():
                 elif available_commands[cmd]['args'][arg]['format'] == "regex":
                     try:
                         regex_compile(value)
-                    except regex_error:
+                    except RegexCompileError:
                         displayerror(f"Argument '{arg}' is not a valid regular expression.")
                         print()
                         exit_loop = True
@@ -410,7 +410,7 @@ def main():
 
             print("Use 'man' to receive more information about a specific command.")
             print("Each word is separated by a space. If you want to use spaces in a single word, please quote the argument with single or double quotes. Escaping characters is not allowed in single quotes.")
-            print("If you want to use characters that are not ASCII printable characters (excluding whitespace), please also quote them.")
+            print("If you want to use characters that are not ASCII printable characters, please also quote them.")
             print("Command abbreviations are allowed. Enter the first few letters of a command. Note that the parser tries to see the input as a complete command before seeking a possible abbreviation.")
             print("After entering a command, add a space then the arguments if arguments are required.\n")
             print("Arguments can be either named or positional. For named arguments, input double hyphen '--' followed the argument name in the same word, and then the argument value as another. Quote the word if you want to have '--' at the beginning literally. For positional arguments, input the value directly as a word. They will be taken as the the first unfilled argument in the command.")
