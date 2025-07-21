@@ -47,22 +47,12 @@ def main():
     from re import compile as regex_compile, PatternError as RegexCompileError
     from shlex import shlex, split as shellsplit
     class realshlex(shlex):
-        def __init__(self, data, **kwargs):
-            super().__init__(data, **kwargs)
-            self.wordchars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_~-./*?=!#$%&()*+,-./:;<=>?@[\\]^_`{|}~'
-            self.quoted = False
-
-        def get_token(self):
-            token = super().get_token()
-            # After a quoted token, self.state holds "'" or '"'
-            self.quoted = self.state in ("'", '"')
-            return token
+        def __init__(self, input: str):
+            super().__init__(input, posix=True, punctuation_chars='-')
+            self.wordchars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_~./*?=!#$%&()*+,-./:;<=>?@[\\]^_`{|}~'
     import sqlite3
 
     # Functional Functions
-    def get_current_submission_time() -> str:
-        return current_submission_time
-
     def update_available_commands():
         for cmd, details in commands.items():
             if not ('use_requirement' in details and (details['use_requirement'] == "admin" and not isadmin or details['use_requirement'] == "user" and currentuser is None)):
@@ -111,6 +101,16 @@ def main():
             "help": "Deregister users.",
             "use_requirement": "admin"
         },
+        "auth": {
+            "args": {"usernames": {"format": "csv"}},
+            "help": "Make user an administrator.",
+            "use_requirement": "admin"
+        },
+        "deauth": {
+            "args": {"usernames": {"format": "csv"}},
+            "help": "Make user a standard user.",
+            "use_requirement": "admin"
+        },
         "users": {
             "help": "List all users.",
             "use_requirement": "admin"
@@ -141,25 +141,25 @@ def main():
         },
         "search": {
             "args": {
-                "roomIDs": {"format": "csv", "default": "*", "substitutions": {"*": "*"}},
-                "usernames": {"format": "csv", "default": "*", "substitutions": {"*": "*"}},
-                "start": {"format": "time", "default": "now", "substitutions": {"*": datetime.min.strftime('%Y-%m-%d %H:%M'), "now": get_current_submission_time}},
-                "end": {"format": "time", "default": "*", "substitutions": {"*": datetime.max.strftime('%Y-%m-%d %H:%M'), "now": get_current_submission_time}},
+                "roomIDs": {"format": "csv", "default": "*"},
+                "usernames": {"format": "csv", "default": "*"},
+                "start": {"format": "time", "default": "now", "substitutions": {"*": datetime.min.strftime('%Y-%m-%d %H:%M')}},
+                "end": {"format": "time", "default": "*", "substitutions": {"*": datetime.max.strftime('%Y-%m-%d %H:%M')}},
                 "usage": {"format": "regex", "default": ""}
             },
             "help": "List bookings of the specified rooms booked by specified users within a given time. Usage can be filtered using a regular expression.",
             "use_requirement": "user"
         },
         "show": {
-            "args": {"bookingIDs": {"format": "csv", "default": "*", "substitutions": {"*": "*"}}},
+            "args": {"bookingIDs": {"format": "csv", "default": "*"}},
             "help": "Show bookings of specified booking IDs.",
             "use_requirement": "user"
         },
         "book": {
             "args": {
                 "roomIDs": {"format": "csv"},
-                "start": {"format": "time", "default": "now", "substitutions": {"now": get_current_submission_time}},
-                "end": {"format": "time", "substitutions": {"now": get_current_submission_time}},
+                "start": {"format": "time", "default": "now"},
+                "end": {"format": "time"},
                 "usage": {"format": "text"}
             },
             "help": "Make a reservation for specified rooms at a given time.",
@@ -177,10 +177,10 @@ def main():
         },
         "clear": {
             "args": {
-                "roomIDs": {"format": "csv", "substitutions": {"*": "*"}},
-                "usernames": {"format": "csv", "substitutions": {"*": "*"}},
-                "start": {"format": "time", "substitutions": {"*": datetime.min.strftime('%Y-%m-%d %H:%M'), "now": get_current_submission_time}},
-                "end": {"format": "time", "substitutions": {"*": datetime.max.strftime('%Y-%m-%d %H:%M'), "now": get_current_submission_time}},
+                "roomIDs": {"format": "csv"},
+                "usernames": {"format": "csv"},
+                "start": {"format": "time", "substitutions": {"*": datetime.min.strftime('%Y-%m-%d %H:%M')}},
+                "end": {"format": "time", "substitutions": {"*": datetime.max.strftime('%Y-%m-%d %H:%M')}},
                 "usage": {"format": "regex", "default": ""}
             },
             "help": "Cancel bookings to make available the specified rooms booked by specified users within a given time. Usage can be filtered using a regular expression. Standard users can only clear their own future bookings.",
@@ -228,7 +228,7 @@ def main():
         )
 
         # Create indexes for bookings table to improve performance
-        connection.execute("CREATE INDEX IF NOT EXISTS idx_bookings_room_user ON bookings (roomID, username)") # Optimizing searches through both room and room&user
+        connection.execute("CREATE INDEX IF NOT EXISTS idx_bookings_room_user ON bookings (roomID, username)") # Optimizing searches through both room and room & user
         connection.execute("CREATE INDEX IF NOT EXISTS idx_bookings_user ON bookings (username)") # Optimizing searches through user
         connection.execute("CREATE INDEX IF NOT EXISTS idx_bookings_time ON bookings (start)") # Optimizing searches through time
         connection.commit()
@@ -256,11 +256,15 @@ def main():
         if currentuser is not None:
             result_isadmin = connection.execute("SELECT isadmin FROM users WHERE username = ?", (currentuser,)).fetchone()
             if result_isadmin is None:
+                currentuser = None
+                isadmin = False
+                update_available_commands()
                 displayerror("Administrators have removed your account. You are now logged out.")
                 print()
                 continue
             elif result_isadmin[0] != isadmin:
                 update_available_commands()
+                displayinfo("Administrators have promoted you to an administrator.")
 
         # Ignore empty input
         if len(raw) == 0:
@@ -274,9 +278,9 @@ def main():
             print() # Print a newline for better readability
             continue
 
-        current_submission_time = datetime.now().strftime('%Y-%m-%d %H:%M') # NEVER USE THIS DIRECTLY, USE get_current_submission_time() INSTEAD!
+        current_submission_time = datetime.now().strftime('%Y-%m-%d %H:%M')
 
-        container = realshlex(raw, posix=True) # Initialize the parser
+        container = realshlex(raw) # Initialize the parser
 
         cmd = container.get_token()
 
@@ -301,11 +305,27 @@ def main():
         unchecked_args = {"named": {}, "positional": []}
 
         exit_loop = False
+        inflag = False
         argname = None
+        number_of_args = 0
+        max_number_of_args = len(available_commands[cmd]['args']) if 'args' in available_commands[cmd] else 0
         while (word := container.get_token()) is not None:
-            if argname is None and not container.quoted and word.startswith('--'):
-                # Named argument
-                argname = word[2:]  # Remove the leading '--'
+            if number_of_args == max_number_of_args:
+                displayerror(f"Command '{cmd}' accepts {max_number_of_args} arguments. More arguments are passed than needed.")
+                print()
+                exit_loop = True
+                break
+            if not inflag and word == '--':
+                # Named argument flag
+                inflag = True
+            elif inflag:
+                # Named argument name
+                argname = word
+                if (not argname in available_commands[cmd]['args']) if 'args' in available_commands[cmd] else False:
+                    displayerror(f"Named argument '{argname}' is not recognized.")
+                    print()
+                    exit_loop = True
+                    break
                 if argname in unchecked_args["named"]:
                     displayerror(f"Assigning two values to the same named argument '{argname}' makes no sense.")
                     print()
@@ -314,11 +334,19 @@ def main():
             elif argname is not None:
                 # Value for the named argument
                 unchecked_args["named"][argname] = word
+                inflag = False
                 argname = None
+                number_of_args += 1
             else:
                 # Positional argument
                 unchecked_args["positional"].append(word)
+                number_of_args += 1
         if exit_loop:
+            continue
+        if inflag:
+            # If we reach here and inflag is True, it means the last argument was a named argument without a value
+            displayerror("Incomplete named argument syntax at the end. Give a name and a value for the named argument.")
+            print()
             continue
         if argname is not None:
             # If we reach here and argname is not None, it means the last argument was a named argument without a value
@@ -326,7 +354,7 @@ def main():
             print()
             continue
 
-        # Check arguments required by the command and fill defaults if necessary
+        # Check missing arguments and fill defaults if necessary
         args = {}
     
         if 'args' in available_commands[cmd]:
@@ -350,9 +378,6 @@ def main():
             if exit_loop:
                 continue
 
-        if len(unchecked_args["named"]) > 0 or len(unchecked_args["positional"]) > 0:
-            displaywarning(f"More arguments passed than needed.")
-
         # Fill substitutions for arguments
         for arg, value in args.items():
             if 'substitutions' in available_commands[cmd]['args'][arg]:
@@ -364,8 +389,10 @@ def main():
         # Check arguments' formats and transform them if necessary
         exit_loop = False
         for arg, value in args.items():
-            if 'format' in available_commands[cmd]['args'][arg]:
-                if available_commands[cmd]['args'][arg]['format'] == "time":
+            if available_commands[cmd]['args'][arg]['format'] == "time":
+                if value == "now":
+                    value = current_submission_time
+                else:
                     try:
                         datetime.strptime(value, '%Y-%m-%d %H:%M')
                     except ValueError:
@@ -373,27 +400,27 @@ def main():
                         print()
                         exit_loop = True
                         break
-                elif available_commands[cmd]['args'][arg]['format'] == "regex":
-                    try:
-                        regex_compile(value)
-                    except RegexCompileError:
-                        displayerror(f"Argument '{arg}' is not a valid regular expression.")
-                        print()
-                        exit_loop = True
-                        break
-                elif available_commands[cmd]['args'][arg]['format'] == "text":
-                    if len(value) == 0:
-                        displayerror(f"Argument '{arg}' cannot be empty.")
-                        print()
-                        exit_loop = True
-                        break
-                elif available_commands[cmd]['args'][arg]['format'] == "csv":
-                    args[arg] = [v.strip() for v in value.split(',')]
-                    if '' in args[arg]:
-                        displayerror(f"Values in '{arg}' cannot be empty.")
-                        print()
-                        exit_loop = True
-                        break
+            elif available_commands[cmd]['args'][arg]['format'] == "regex":
+                try:
+                    regex_compile(value)
+                except RegexCompileError:
+                    displayerror(f"Argument '{arg}' is not a valid regular expression.")
+                    print()
+                    exit_loop = True
+                    break
+            elif available_commands[cmd]['args'][arg]['format'] == "text":
+                if len(value) == 0:
+                    displayerror(f"Argument '{arg}' cannot be empty.")
+                    print()
+                    exit_loop = True
+                    break
+            elif available_commands[cmd]['args'][arg]['format'] == "csv":
+                args[arg] = [v.strip() for v in value.split(',')]
+                if '' in args[arg]:
+                    displayerror(f"Values in '{arg}' cannot be empty.")
+                    print()
+                    exit_loop = True
+                    break
         if exit_loop:
             continue
 
@@ -529,12 +556,12 @@ def main():
 
                 # Constructing query parameters with non-fatal dynamic input validity check using stored data
                 params = []
-                if args["roomIDs"][0] != '*':
+                if '*' not in args["roomIDs"]:
                     actual_room_ids = [room for room in args["roomIDs"] if connection.execute("SELECT 0 FROM rooms WHERE id=?", [room]).fetchone() is not None or (command_notice := True) and displaywarning(f"Room '{room}' does not exist and is skipped.")]
                     params.extend(actual_room_ids)
                 else:
                     actual_room_ids = ['*']
-                if args["usernames"][0] != '*':
+                if '*' not in args["usernames"]:
                     actual_user_ids = [user for user in args["usernames"] if connection.execute("SELECT 0 FROM users WHERE username=?", [user]).fetchone() is not None or (command_notice := True) and displaywarning(f"User '{user}' does not exist and is skipped.")]
                     params.extend(actual_user_ids)
                 else:
@@ -565,8 +592,8 @@ def main():
             elif cmd == "show":
 
                 # Fetching results with non-fatal dynamic input validity check using stored data
-                if args["bookingIDs"][0] == '*':
-                    result_bookings = connection.execute("SELECT * FROM bookings").fetchall()
+                if '*' not in args["bookingIDs"]:
+                    result_bookings = connection.execute("SELECT * FROM bookings WHERE id IN (" + ','.join('?' for _ in args["bookingIDs"]) + ")", args["bookingIDs"]).fetchall()
                 else:
                     result_bookings = []
                     for booking_id in args["bookingIDs"]:
@@ -601,7 +628,7 @@ def main():
                     continue
 
                 # Dynamic input validity check using stored data
-                if not isadmin and not is_valid_time_interval(get_current_submission_time(), args["start"], allow_equal=True):
+                if not isadmin and not is_valid_time_interval(current_submission_time, args["start"], allow_equal=True):
                     displayerror("Standard user cannot set start time in the past. Please use a future time or 'now'.")
                     print()
                     continue
@@ -650,7 +677,7 @@ def main():
                         displaywarning(f"You can only modify your own bookings as a standard user. Booking ID '{booking_id}' is skipped.")
                         command_notice = True
                         continue
-                    if not isadmin and not is_valid_time_interval(get_current_submission_time(), result_booking[1], allow_equal=True):
+                    if not isadmin and not is_valid_time_interval(current_submission_time, result_booking[1], allow_equal=True):
                         displaywarning(f"Booking ID '{booking_id}' is in the past and cannot be modified by a standard user.")
                         command_notice = True
                         continue
@@ -687,7 +714,7 @@ def main():
                         displaywarning(f"You can only cancel your own bookings as a standard user. Booking ID '{booking_id}' is skipped.")
                         command_notice = True
                         continue
-                    if not isadmin and not is_valid_time_interval(get_current_submission_time(), result_booking[1], allow_equal=True):
+                    if not isadmin and not is_valid_time_interval(current_submission_time, result_booking[1], allow_equal=True):
                         displaywarning(f"Booking ID '{booking_id}' is in the past and cannot be cancelled by a standard user.")
                         command_notice = True
                         continue
@@ -709,7 +736,7 @@ def main():
 
             elif cmd == "clear":
 
-                if (args["roomIDs"][0] == '*' or args["usernames"][0] == '*' or args["start"] == '*' or args["end"] == '*') and input("You are using wildcard '*' in one or more arguments. This will cancel bookings massively. Are you sure you want to proceed? Enter 'yes' to confirm: ").lower() == "yes":
+                if ('*' not in args["roomIDs"] and '*' not in args["usernames"] and '*' not in args["start"] and '*' not in args["end"]) or input("You are using wildcard '*' in one or more arguments. This will cancel bookings massively. Are you sure you want to proceed? Enter 'yes' to confirm: ").lower() == "yes":
 
                     # Input consistency checks
                     if not is_valid_time_interval(args["start"], args["end"]):
@@ -722,12 +749,12 @@ def main():
                     command_notice = False
                     actual_room_ids = args["roomIDs"]
                     actual_usernames = args["usernames"]
-                    if actual_room_ids[0] != '*':
+                    if '*' not in actual_room_ids:
                         actual_room_ids = [room for room in actual_room_ids if connection.execute("SELECT 0 FROM rooms WHERE id=?", [room]).fetchone() is not None or (command_notice := True) and displaywarning(f"Room '{room}' does not exist and is skipped.")]
                         params.extend(actual_room_ids)
                     else:
                         actual_room_ids = ['*']
-                    if actual_usernames[0] != '*':
+                    if '*' not in actual_usernames:
                         actual_usernames = [user for user in actual_usernames if connection.execute("SELECT 0 FROM users WHERE username=?", [user]).fetchone() is not None or (command_notice := True) and displaywarning(f"User '{user}' does not exist and is skipped.")]
                         params.extend(actual_usernames)
                     else:  
@@ -785,7 +812,7 @@ def main():
                     print() if command_notice else None # Print a newline if there was a in-command notice
 
                     pwhash = hash(inputpw("Password: ").encode()).digest()
-                    connection.execute("INSERT OR REPLACE users (username, pwhash) VALUES (?, ?)", (args["username"], pwhash))
+                    connection.execute("INSERT OR REPLACE INTO users (username, pwhash) VALUES (?, ?)", (args["username"], pwhash))
                     displaysuccess(f"User '{args['username']}' registered or updated successfully.")
 
                 elif cmd == "dereg":
@@ -802,8 +829,8 @@ def main():
                                 displaywarning(f"User '{username}' does not exist and is skipped.")
                                 command_notice = True
                                 continue
-                            elif username == currentuser:
-                                displaywarning("You cannot deregister yourself. Please log in as another user first. Your username is skipped.")
+                            if username == currentuser:
+                                displaywarning("You cannot deregister yourself. Please log in as another admin first. Your username is skipped.")
                                 command_notice = True
                                 continue
 
@@ -834,6 +861,64 @@ def main():
 
                     else:
                         displayerror("Deregistration cancelled.")
+
+                elif cmd == "auth":
+
+                    # No exclusive lock as even if the user is authorized or deauthorized on the fly, data integrity and consistency are still maintained, without any errors occurring.
+
+                    # Doing actions with non-fatal dynamic input validity check using stored data
+                    result_usernames = []
+                    for username in args["usernames"]:
+                        if connection.execute("SELECT username FROM users WHERE username=?", [username]).fetchone() is None:
+                            displaywarning(f"User '{username}' does not exist and is skipped.")
+                            command_notice = True
+                            continue
+
+                        result_usernames.append([username])
+                        connection.execute("UPDATE users SET isadmin = 1 WHERE username=?", [username])
+
+                    print() if command_notice else None # Print a newline if there was a in-command notice
+
+                    if result_usernames:
+                        displaysuccess("The following users are authorized successfully:")
+                        display_table(
+                            ["Username"],
+                            [20],
+                            *result_usernames
+                        )
+                    else:
+                        displayerror("No users were authorized.")
+
+                elif cmd == "deauth":
+
+                    # No exclusive lock as even if the user is authorized or deauthorized on the fly, data integrity and consistency are still maintained, without any errors occurring.
+
+                    # Doing actions with non-fatal dynamic input validity check using stored data
+                    result_usernames = []
+                    for username in args["usernames"]:
+                        if connection.execute("SELECT username FROM users WHERE username=?", [username]).fetchone() is None:
+                            displaywarning(f"User '{username}' does not exist and is skipped.")
+                            command_notice = True
+                            continue
+                        if username == currentuser:
+                            displaywarning("You cannot deauthorize yourself. Please log in as another admin first. Your username is skipped.")
+                            command_notice = True
+                            continue
+
+                        result_usernames.append([username])
+                        connection.execute("UPDATE users SET isadmin = 0 WHERE username=?", [username])
+
+                    print() if command_notice else None # Print a newline if there was a in-command notice
+
+                    if result_usernames:
+                        displaysuccess("The following users are deauthorized successfully:")
+                        display_table(
+                            ["Username"],
+                            [20],
+                            *result_usernames
+                        )
+                    else:
+                        displayerror("No users were deauthorized.")
 
                 elif cmd == "users":
 

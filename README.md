@@ -16,7 +16,7 @@ Booker is a command-line room booking system for managing users, rooms, and book
 ### Getting Started
 1. To use it on your computer, run the script as a standalone program:
     ```bash
-    python main.py
+    python src/main.py
     ```
 2. If you want a single executable:
     Use `pyinstaller` in the **root directory of this repository** to compile the Python source code into an executable:
@@ -81,6 +81,10 @@ These are the currently available commands in Booker:
 ## Data Storage
 If you run Booker from Python script, the files will be stored in the same directory as the script.
 If you run it as an executable, the files will be stored in the `_internal` directory next to the executable.
+
+## Important Dev Notes
+I still don't have the time to write a full documentation for developers. But here are some important notes:
+- `realshlex` is a custom implementation of `shlex` that accepts all ASCII characters as `wordchars` except those used for Booker syntax.
 
 ## License
 This project is licensed under the MIT License by Chen Hang Tsz Henry. See the [LICENSE](LICENSE) file for details.
