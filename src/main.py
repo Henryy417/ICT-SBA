@@ -18,19 +18,19 @@ def displayinfo(msg: str): # Information Message: User may want to know this but
 def display_table(headers: list[str], widths: list[int], *rows: list):
     line_buffer = ""
     for header, width in zip(headers, widths):
-        line_buffer += header.ljust(width)
-    print(line_buffer)
+        line_buffer += '|' + header.ljust(width)
+    print(line_buffer + '|')
 
     line_buffer = ""
     for width in widths:
-        line_buffer += '---'.ljust(width)
-    print(line_buffer)
+        line_buffer += '|' + '-' * width
+    print(line_buffer + '|')
 
     for row in rows:
         line_buffer = ""
         for item, width in zip(row, widths):
-            line_buffer += str(item).ljust(width)
-        print(line_buffer)
+            line_buffer += '|' + str(item).ljust(width)
+        print(line_buffer + '|')
 
 # Program information
 INFO = "Booker v2.0"
@@ -291,11 +291,11 @@ def main():
         escaped = False
 
         current_word = ''
-        current_is_quoted = None
+        current_is_quoted = False
 
         parse_error_loop_exit = False
         while index < len(raw) + 1:
-            if index == len(raw) or raw[index] == ' ' and not in_quote:
+            if index == len(raw) or raw[index] in (' ','\t') and not in_quote:
                 if current_is_quoted:
                     if unfilled_named_args:
                         args[unfilled_named_args.pop(0)] = current_word
@@ -303,7 +303,9 @@ def main():
                         positional_args.append(current_word)
                     current_is_quoted = False
                 else:
-                    if cmd is None:
+                    if current_word == '':
+                        index += 1
+                    elif cmd is None:
                         if current_word not in available_commands:
                             possible_cmds = []
                             for available_cmd in available_commands:
@@ -332,8 +334,7 @@ def main():
                             cmd = current_word
                     elif current_word.startswith('--') :
                         if 'args' not in commands[cmd] or current_word not in commands[cmd]['args']:
-                            displaywarning(f"Unknown argument '{current_word}' for command '{cmd}'. Adding it as a positional argument.")
-                            # Next value will be treated as a positional argument
+                            displaywarning(f"Unknown argument '{current_word}' for command '{cmd}'. Argument name discarded.")
                         else:
                             unfilled_named_args.append(current_word[2:])
                     elif unfilled_named_args:
@@ -350,7 +351,7 @@ def main():
                 elif (quote := raw[index]) in ('"', '\'') and not in_quote:
                     in_quote = quote
                     current_is_quoted = True
-                elif raw[index] == '\\' and in_quote != '\'' and index + 1 < len(raw) and raw[index + 1] in ('"', '\'', '\\'):
+                elif raw[index] == '\\' and in_quote != '\'' and index + 1 < len(raw) and raw[index + 1] in (('"', '\\') if in_quote else ('"', '\'', '\\')):
                     escaped = True
                 else:
                     current_word += raw[index]
@@ -449,11 +450,12 @@ def main():
         if cmd == "help":
 
             print("Use 'man' to receive more information about a specific command.")
-            print("Each word is separated by a space. If you want to use spaces in a single word, please quote the argument with single or double quotes. Escaping characters is not allowed in single quotes.")
-            print("If you want to use characters that are not ASCII printable characters, please also quote them.")
+            print("Your input consists of words. Each word is separated by a space outside quotes.")
+            print("Words are classified as the command, argument names, and argument values.")
             print("Command abbreviations are allowed. Enter the first few letters of a command. Note that the parser tries to see the input as a complete command before seeking a possible abbreviation.")
-            print("After entering a command, add a space then the arguments if arguments are required.\n")
-            print("Arguments can be either named or positional. For named arguments, input double hyphen '--' followed the argument name in the same word without quotes, and then the argument value as another. Quote the word if you want to have '--' at the beginning literally. For positional arguments, input the value directly as a word. They will be taken as the the first unfilled argument in the command.")
+            print("After entering the command, enter arguments as separate words. Arguments can be either named or positional. For named arguments, use double hyphen '--' in front of the argument name, and then the argument value as another word. For positional arguments, simply enter the value as a word.")
+            print("If you want to use spaces or characters that are not ASCII printable characters in a single argument value, please quote them with either single or double quotes. Commands and argument names cannot be quoted else they will be treated as argument values. You can enter literal double hyphens '--' in argument values by using this.")
+            print("If you want to use quotes literally in an argument value, please escape them with a backslash '\\'.")
             print("Default values of arguments, if exist, will be filled when not enough arguments are provided.")
             print("Although the parser tries to tolerate input errors, it is still recommended to follow the syntax strictly to avoid unexpected results.")
 
@@ -472,7 +474,7 @@ def main():
 
             display_table(
                 ["Command", "Description"],
-                [15, 0],
+                [15, 200],
                 *[[cmd, details['help']] for cmd, details in commands.items() if cmd in available_commands]  # Filter out commands that are not available to the current user
             )
 
@@ -554,7 +556,7 @@ def main():
                     displaysuccess("Rooms found:")
                     display_table(
                         ["ID", "Description"],
-                        [10, 0],
+                        [10, 40],
                         *result_rooms
                     )
                 else:
@@ -608,7 +610,7 @@ def main():
                     displaysuccess("Bookings found:")
                     display_table(
                         ["ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
-                        [10, 10, 20, 20, 20, 0],
+                        [10, 10, 20, 20, 20, 40],
                         *result_bookings
                     )
                 else:
@@ -635,7 +637,7 @@ def main():
                     displaysuccess("Bookings found:")
                     display_table(
                         ["ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
-                        [10, 10, 20, 20, 20, 0],
+                        [10, 10, 20, 20, 20, 40],
                         *result_bookings
                     )
                 else:
@@ -680,7 +682,7 @@ def main():
                     displaysuccess("Booking(s) below created successfully:")
                     display_table(
                         ["ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
-                        [10, 10, 20, 20, 20, 0],
+                        [10, 10, 20, 20, 20, 40],
                         *result_bookings
                     )
                 else:
@@ -717,7 +719,7 @@ def main():
                     displaysuccess("The following bookings are modified as below successfully:")
                     display_table(
                         ["ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
-                        [10, 10, 20, 20, 20, 0],
+                        [10, 10, 20, 20, 20, 40],
                         *result_bookings
                     )
                 else:
@@ -753,7 +755,7 @@ def main():
                     displaysuccess("The following bookings are cancelled successfully:")
                     display_table(
                         ["ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
-                        [10, 10, 20, 20, 20, 0],
+                        [10, 10, 20, 20, 20, 40],
                         *result_bookings
                     )
                 else:
@@ -822,7 +824,7 @@ def main():
                         displaysuccess("The following bookings are cancelled successfully:")
                         display_table(
                             ["ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
-                            [10, 10, 20, 20, 20, 0],
+                            [10, 10, 20, 20, 20, 40],
                             *result_bookings
                         )
                     else:
@@ -886,7 +888,7 @@ def main():
                                 displaysuccess("The following bookings are cancelled due to user deregistration:")
                                 display_table(
                                     ["ID", "Room ID", "User", "Start Time", "End Time", "Usage"],
-                                    [10, 10, 20, 20, 20, 0],
+                                    [10, 10, 20, 20, 20, 40],
                                     *result_bookings
                                 )
                         else:
@@ -961,7 +963,7 @@ def main():
                         displaysuccess("Users found:")
                         display_table(
                             ["Admin", "Username"],
-                            [5, 0],
+                            [5, 20],
                             *[[bool(user[1]), user[0]] for user in result_users]
                         )
                     else:
@@ -980,9 +982,6 @@ def main():
 
                         result_room_ids.append([room_id])
                         connection.execute("INSERT OR REPLACE INTO rooms (id, description) VALUES (?, ?)", [room_id, args["description"]])
-
-                    connection.commit()
-                    connection.close()
 
                     print() if command_notice else None # Print a newline if there was a in-command notice
 
