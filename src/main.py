@@ -50,8 +50,10 @@ def main():
 
     # Functional Functions
     def update_available_commands():
+        global available_commands
+        available_commands = []
         for cmd, details in commands.items():
-            if not ('use_requirement' in details and (details['use_requirement'] == "admin" and not isadmin or details['use_requirement'] == "user" and currentuser is None)):
+            if 'use_requirement' not in details or (details['use_requirement'] == "admin" and isadmin or details['use_requirement'] == "user" and currentuser is not None):
                 available_commands.append(cmd)
 
     def is_valid_time_interval(start: str, end: str, allow_equal: bool = False) -> bool:
@@ -189,8 +191,7 @@ def main():
         }
     }
 
-    available_commands = [] # List of available commands based on user status
-    update_available_commands() # Update available commands based on current user status
+    update_available_commands() # Initialize available_commands variable & update available commands based on current user status
 
     # Print program information
     print(INFO)
@@ -263,8 +264,10 @@ def main():
                 print()
                 continue
             elif result_isadmin[0] != isadmin:
+                isadmin = result_isadmin[0] == 1
                 update_available_commands()
-                displayinfo("Administrators have promoted you to an administrator.")
+                displayinfo("Administrators have promoted you to an administrator." if result_isadmin[0] == 1 else "Administrators have demoted you to a standard user.")
+                print()
 
         current_submission_time = datetime.now().strftime('%Y-%m-%d %H:%M') # Get current time for submission
 
@@ -315,15 +318,17 @@ def main():
                                 displayerror(f"Unknown command or abbreviation '{current_word}'. Type 'help' for a list of commands.")
                                 parse_error_loop_exit = True
                                 break
+                        else:
+                            cmd = current_word
                     elif current_word.startswith('--'):
                         argname = current_word[2:]
-                        if argname not in commands[cmd]['args']:
+                        if 'args' not in commands[cmd] or argname not in commands[cmd]['args']:
                             displayerror(f"Unknown argument '{argname}' for command '{cmd}'.")
                             parse_error_loop_exit = True
                             break
                         unfilled_named_args.append(current_word[2:])
                     elif unfilled_named_args:
-                        args[argname := unfilled_named_args.pop(0)] = MetaChar(current_word) if current_word in commands[cmd]['args'][argname]['special_chars'] else current_word
+                        args[argname := unfilled_named_args.pop(0)] = MetaChar(current_word) if current_word in MetaChar else current_word
                     else:
                         positional_args.append(MetaChar(current_word) if current_word in MetaChar else current_word)
                 in_quote = False
@@ -352,27 +357,34 @@ def main():
                 args[arg] = ''
 
         # Fill positional arguments and check for required arguments plus filling defaults
-        for arg in commands[cmd]['args']:
-            if arg not in args:
-                if positional_args:
-                    value = positional_args.pop(0)
-                    args[arg] = value.value if isinstance(value, MetaChar) and 'special_chars' in commands[cmd]['args'][arg] and value in commands[cmd]['args'][arg]['special_chars'] else value
-                else:
-                    if 'default' in commands[cmd]['args'][arg]:
-                        args[arg] = commands[cmd]['args'][arg]['default']
+        if 'args' in commands[cmd]:
+            for arg in commands[cmd]['args']:
+                if arg not in args:
+                    if positional_args:
+                        value = positional_args.pop(0)
+                        args[arg] = value
                     else:
-                        displayerror(f"Missing required argument '{arg}' for command '{cmd}'.")
-                        parse_error_loop_exit = True
-                        break
-        if parse_error_loop_exit:
-            print() # Print a newline for better readability
-            continue
+                        if 'default' in commands[cmd]['args'][arg]:
+                            args[arg] = commands[cmd]['args'][arg]['default']
+                        else:
+                            displayerror(f"Missing required argument '{arg}' for command '{cmd}'.")
+                            parse_error_loop_exit = True
+                            break
+            if parse_error_loop_exit:
+                print() # Print a newline for better readability
+                continue
         if len(positional_args) > 0:
-            displayerror(f"Too many positional arguments for command '{cmd}'. Expected {len(commands[cmd]['args'])}, got {len(commands[cmd]['args']) + len(positional_args)}.")
+            displayerror(f"Too many positional arguments for command '{cmd}'. Expected {len(commands[cmd]['args']) if 'args' in commands[cmd] else 0}, got {len(args) + len(positional_args)}.")
             print()
+            continue
 
         # Validate argument values
         for arg in args:
+            # Convert MetaChar to its value
+            if isinstance(args[arg], MetaChar):
+                if 'special_chars' not in commands[cmd]['args'][arg] or args[arg] not in commands[cmd]['args'][arg]['special_chars']:
+                    args[arg] = args[arg].value
+                    
             if not isinstance(args[arg], MetaChar):
                 if commands[cmd]['args'][arg]['format'] == 'csv':
                     args[arg] = args[arg].split(',')
