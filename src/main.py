@@ -46,6 +46,7 @@ def main():
     from os import system as sysexec, name as sysname
     from re import compile as regex_compile, PatternError as RegexCompileError
     from enum import Enum
+    from difflib import SequenceMatcher
     import sqlite3
 
     # Functional Functions
@@ -315,18 +316,26 @@ def main():
                                 parse_error_loop_exit = True
                                 break
                             else:
-                                displayerror(f"Unknown command or abbreviation '{current_word}'. Type 'help' for a list of commands.")
-                                parse_error_loop_exit = True
-                                break
+                                closest_command = None
+                                greatest_ratio = 0
+                                for available_cmd in available_commands:
+                                    if (ratio := SequenceMatcher(a=current_word, b=available_cmd).ratio()) > greatest_ratio:
+                                        closest_command = available_cmd
+                                        greatest_ratio = ratio
+                                displayerror(f"Unknown command or abbreviation '{current_word}'. Type 'help' for a list of commands.{f" Did you mean '{closest_command}'?" if greatest_ratio > 0.5 else ''}")
+                                if closest_command is not None and greatest_ratio > 0.5 and input(f"Press Enter to run the command as '{closest_command}' anyway, or enter anything to cancel: ") == '':
+                                    cmd = closest_command
+                                else:
+                                    parse_error_loop_exit = True
+                                    break
                         else:
                             cmd = current_word
-                    elif current_word.startswith('--'):
-                        argname = current_word[2:]
-                        if 'args' not in commands[cmd] or argname not in commands[cmd]['args']:
-                            displayerror(f"Unknown argument '{argname}' for command '{cmd}'.")
-                            parse_error_loop_exit = True
-                            break
-                        unfilled_named_args.append(current_word[2:])
+                    elif current_word.startswith('--') :
+                        if 'args' not in commands[cmd] or current_word not in commands[cmd]['args']:
+                            displaywarning(f"Unknown argument '{current_word}' for command '{cmd}'. Adding it as a positional argument.")
+                            # Next value will be treated as a positional argument
+                        else:
+                            unfilled_named_args.append(current_word[2:])
                     elif unfilled_named_args:
                         args[argname := unfilled_named_args.pop(0)] = MetaChar(current_word) if current_word in MetaChar else current_word
                     else:
@@ -352,6 +361,10 @@ def main():
         if parse_error_loop_exit:
             print() # Print a newline for better readability
             continue
+        if cmd is None:
+            displayerror("No command entered. Type 'help' for a list of commands.")
+            print()
+            continue
         if unfilled_named_args:
             for arg in unfilled_named_args:
                 args[arg] = ''
@@ -374,9 +387,7 @@ def main():
                 print() # Print a newline for better readability
                 continue
         if len(positional_args) > 0:
-            displayerror(f"Too many positional arguments for command '{cmd}'. Expected {len(commands[cmd]['args']) if 'args' in commands[cmd] else 0}, got {len(args) + len(positional_args)}.")
-            print()
-            continue
+            displaywarning(f"Too many arguments for command '{cmd}'. Expected {len(commands[cmd]['args']) if 'args' in commands[cmd] else 0}, got {len(args) + len(positional_args)}.")
 
         # Validate argument values
         for arg in args:
@@ -442,8 +453,9 @@ def main():
             print("If you want to use characters that are not ASCII printable characters, please also quote them.")
             print("Command abbreviations are allowed. Enter the first few letters of a command. Note that the parser tries to see the input as a complete command before seeking a possible abbreviation.")
             print("After entering a command, add a space then the arguments if arguments are required.\n")
-            print("Arguments can be either named or positional. For named arguments, input double hyphen '--' followed the argument name in the same word, and then the argument value as another. Quote the word if you want to have '--' at the beginning literally. For positional arguments, input the value directly as a word. They will be taken as the the first unfilled argument in the command.")
+            print("Arguments can be either named or positional. For named arguments, input double hyphen '--' followed the argument name in the same word without quotes, and then the argument value as another. Quote the word if you want to have '--' at the beginning literally. For positional arguments, input the value directly as a word. They will be taken as the the first unfilled argument in the command.")
             print("Default values of arguments, if exist, will be filled when not enough arguments are provided.")
+            print("Although the parser tries to tolerate input errors, it is still recommended to follow the syntax strictly to avoid unexpected results.")
 
             print() # Print a newline for better readability
 
