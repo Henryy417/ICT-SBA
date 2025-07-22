@@ -46,6 +46,8 @@ These are the currently available commands in Booker:
 |-------------|---------------------------------------------|
 | reg         | Register a new user or update password      |
 | dereg       | Deregister users                            |
+| auth        | Make user an administrator                  |
+| deauth      | Make user a standard user                   |
 | users       | List all users                              |
 | build       | Create new rooms or update descriptions     |
 | destroy     | Delete rooms                                |
