@@ -45,18 +45,14 @@ def main():
     from hashlib import sha3_512 as hash
     from os import system as sysexec, name as sysname
     from re import compile as regex_compile, PatternError as RegexCompileError
-    from shlex import shlex, split as shellsplit
-    class realshlex(shlex):
-        def __init__(self, input: str):
-            super().__init__(input, posix=True, punctuation_chars='-')
-            self.wordchars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_~./*?=!#$%&()*+,-./:;<=>?@[\\]^_`{|}~'
+    from enum import Enum
     import sqlite3
 
     # Functional Functions
     def update_available_commands():
         for cmd, details in commands.items():
             if not ('use_requirement' in details and (details['use_requirement'] == "admin" and not isadmin or details['use_requirement'] == "user" and currentuser is None)):
-                available_commands[cmd] = details
+                available_commands.append(cmd)
 
     def is_valid_time_interval(start: str, end: str, allow_equal: bool = False) -> bool:
         start_dt = datetime.strptime(start, '%Y-%m-%d %H:%M')
@@ -81,6 +77,11 @@ def main():
     currentuser = None  # Placeholder for current user
     isadmin = False  # Placeholder for admin status
 
+    # Command special flag characters
+    class MetaChar(Enum):
+        asterisk = '*'
+        now = 'now'
+    
     # Command definitions
     commands = {
         # Commands usable before login
@@ -141,25 +142,25 @@ def main():
         },
         "search": {
             "args": {
-                "roomIDs": {"format": "csv", "default": "*"},
-                "usernames": {"format": "csv", "default": "*"},
-                "start": {"format": "time", "default": "now", "substitutions": {"*": datetime.min.strftime('%Y-%m-%d %H:%M')}},
-                "end": {"format": "time", "default": "*", "substitutions": {"*": datetime.max.strftime('%Y-%m-%d %H:%M')}},
+                "roomIDs": {"format": "csv", "default": MetaChar.asterisk, "special_chars": [MetaChar.asterisk]},
+                "usernames": {"format": "csv", "default": MetaChar.asterisk, "special_chars": [MetaChar.asterisk]},
+                "start": {"format": "time", "default": MetaChar.now, "special_chars": [MetaChar.now, MetaChar.asterisk]},
+                "end": {"format": "time", "default": MetaChar.asterisk, "special_chars": [MetaChar.now, MetaChar.asterisk]},
                 "usage": {"format": "regex", "default": ""}
             },
             "help": "List bookings of the specified rooms booked by specified users within a given time. Usage can be filtered using a regular expression.",
             "use_requirement": "user"
         },
         "show": {
-            "args": {"bookingIDs": {"format": "csv", "default": "*"}},
+            "args": {"bookingIDs": {"format": "csv", "default": MetaChar.asterisk, "special_chars": [MetaChar.asterisk]}},
             "help": "Show bookings of specified booking IDs.",
             "use_requirement": "user"
         },
         "book": {
             "args": {
                 "roomIDs": {"format": "csv"},
-                "start": {"format": "time", "default": "now"},
-                "end": {"format": "time"},
+                "start": {"format": "time", "default": MetaChar.now, "special_chars": [MetaChar.now]},
+                "end": {"format": "time", "special_chars": [MetaChar.now]},
                 "usage": {"format": "text"}
             },
             "help": "Make a reservation for specified rooms at a given time.",
@@ -177,10 +178,10 @@ def main():
         },
         "clear": {
             "args": {
-                "roomIDs": {"format": "csv"},
-                "usernames": {"format": "csv"},
-                "start": {"format": "time", "substitutions": {"*": datetime.min.strftime('%Y-%m-%d %H:%M')}},
-                "end": {"format": "time", "substitutions": {"*": datetime.max.strftime('%Y-%m-%d %H:%M')}},
+                "roomIDs": {"format": "csv", "special_chars": [MetaChar.asterisk]},
+                "usernames": {"format": "csv", "special_chars": [MetaChar.asterisk]},
+                "start": {"format": "time", "special_chars": [MetaChar.now, MetaChar.asterisk]},
+                "end": {"format": "time", "special_chars": [MetaChar.now, MetaChar.asterisk]},
                 "usage": {"format": "regex", "default": ""}
             },
             "help": "Cancel bookings to make available the specified rooms booked by specified users within a given time. Usage can be filtered using a regular expression. Standard users can only clear their own future bookings.",
@@ -188,7 +189,7 @@ def main():
         }
     }
 
-    available_commands = {} # List of available commands based on user status
+    available_commands = [] # List of available commands based on user status
     update_available_commands() # Update available commands based on current user status
 
     # Print program information
@@ -244,17 +245,16 @@ def main():
         connection.commit() # Commit any previous changes to the database and avoid database lock issues
         connection.close() # Close previous connection to avoid resource usage
 
-        # Parser #
-
+        # Input & Authorization #
         raw = input((('\33[91m'+currentuser+'\33[0m' if isadmin else currentuser) if currentuser is not None else "") + "> ").strip()
 
         # Re-initialize database access
         connection = sqlite3.connect(DB_PATH) # Initialize database connection for command execution
         connection.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
 
-        # Check if user still exists
+        # Check if user still exists if logged in
         if currentuser is not None:
-            result_isadmin = connection.execute("SELECT isadmin FROM users WHERE username = ?", (currentuser,)).fetchone()
+            result_isadmin = connection.execute("SELECT isadmin FROM users WHERE username = ?", [currentuser]).fetchone()
             if result_isadmin is None:
                 currentuser = None
                 isadmin = False
@@ -266,165 +266,155 @@ def main():
                 update_available_commands()
                 displayinfo("Administrators have promoted you to an administrator.")
 
+        current_submission_time = datetime.now().strftime('%Y-%m-%d %H:%M') # Get current time for submission
+
+        # Parser #
         # Ignore empty input
         if len(raw) == 0:
             continue
 
-        # Check if input can be parsed correctly
-        try:
-            shellsplit(raw)
-        except ValueError:
-            displayerror("Invalid input. Looks like you forget a closing quote somewhere, or escape characters are not used properly.\nQuotes and backslashes, when used literally, should be escaped with a backslash (\\). Escaping character is not available in single quotes.")
+        # Parse the input valid command and arguments
+        cmd = None
+        args = {}
+
+        positional_args = []
+
+        unfilled_named_args = []
+
+        index = 0
+
+        in_quote = False
+        escaped = False
+
+        current_word = ''
+        current_is_quoted = None
+
+        parse_error_loop_exit = False
+        while index < len(raw) + 1:
+            if index == len(raw) or raw[index] == ' ' and not in_quote:
+                if current_is_quoted:
+                    if unfilled_named_args:
+                        args[unfilled_named_args.pop(0)] = current_word
+                    else:
+                        positional_args.append(current_word)
+                    current_is_quoted = False
+                else:
+                    if cmd is None:
+                        if current_word not in available_commands:
+                            possible_cmds = []
+                            for available_cmd in available_commands:
+                                if available_cmd.startswith(current_word):
+                                    possible_cmds.append(available_cmd)
+                            if len(possible_cmds) == 1:
+                                cmd = possible_cmds[0]
+                            elif len(possible_cmds) > 1:
+                                displayerror(f"Ambiguous command abbreviation '{current_word}'. Which command did you mean: {', '.join(possible_cmds)}?")
+                                parse_error_loop_exit = True
+                                break
+                            else:
+                                displayerror(f"Unknown command or abbreviation '{current_word}'. Type 'help' for a list of commands.")
+                                parse_error_loop_exit = True
+                                break
+                    elif current_word.startswith('--'):
+                        argname = current_word[2:]
+                        if argname not in commands[cmd]['args']:
+                            displayerror(f"Unknown argument '{argname}' for command '{cmd}'.")
+                            parse_error_loop_exit = True
+                            break
+                        unfilled_named_args.append(current_word[2:])
+                    elif unfilled_named_args:
+                        args[argname := unfilled_named_args.pop(0)] = MetaChar(current_word) if current_word in commands[cmd]['args'][argname]['special_chars'] else current_word
+                    else:
+                        positional_args.append(MetaChar(current_word) if current_word in MetaChar else current_word)
+                in_quote = False
+                escaped = False
+                current_word = ''
+                current_is_quoted = None    
+            elif not escaped:
+                if raw[index] == in_quote:
+                    in_quote = False
+                elif (quote := raw[index]) in ('"', '\'') and not in_quote:
+                    in_quote = quote
+                    current_is_quoted = True
+                elif raw[index] == '\\' and in_quote != '\'' and index + 1 < len(raw) and raw[index + 1] in ('"', '\'', '\\'):
+                    escaped = True
+                else:
+                    current_word += raw[index]
+            else:
+                current_word += raw[index]
+                escaped = False
+            index += 1
+        if parse_error_loop_exit:
+            print() # Print a newline for better readability
+            continue
+        if unfilled_named_args:
+            for arg in unfilled_named_args:
+                args[arg] = ''
+
+        # Fill positional arguments and check for required arguments plus filling defaults
+        for arg in commands[cmd]['args']:
+            if arg not in args:
+                if positional_args:
+                    value = positional_args.pop(0)
+                    args[arg] = value.value if isinstance(value, MetaChar) and 'special_chars' in commands[cmd]['args'][arg] and value in commands[cmd]['args'][arg]['special_chars'] else value
+                else:
+                    if 'default' in commands[cmd]['args'][arg]:
+                        args[arg] = commands[cmd]['args'][arg]['default']
+                    else:
+                        displayerror(f"Missing required argument '{arg}' for command '{cmd}'.")
+                        parse_error_loop_exit = True
+                        break
+        if parse_error_loop_exit:
+            print() # Print a newline for better readability
+            continue
+        if len(positional_args) > 0:
+            displayerror(f"Too many positional arguments for command '{cmd}'. Expected {len(commands[cmd]['args'])}, got {len(commands[cmd]['args']) + len(positional_args)}.")
+            print()
+
+        # Validate argument values
+        for arg in args:
+            if not isinstance(args[arg], MetaChar):
+                if commands[cmd]['args'][arg]['format'] == 'csv':
+                    args[arg] = args[arg].split(',')
+                    if '' in args[arg]:
+                        displayerror(f"CSV argument '{arg}' cannot be empty.")
+                        parse_error_loop_exit = True
+                        break
+                elif commands[cmd]['args'][arg]['format'] == 'time':
+                    try:
+                        datetime.strptime(args[arg], '%Y-%m-%d %H:%M')
+                    except ValueError:
+                        displayerror(f"Time argument '{arg}' is not a valid time input.")
+                        parse_error_loop_exit = True
+                elif commands[cmd]['args'][arg]['format'] == 'regex':
+                    try:
+                        regex_compile(args[arg])
+                    except RegexCompileError:
+                        displayerror(f"Regular expression argument '{arg}' is not a valid regex pattern.")
+                        parse_error_loop_exit = True
+                elif commands[cmd]['args'][arg]['format'] == 'text':
+                    if not args[arg]:
+                        displayerror(f"Text argument '{arg}' cannot be empty.")
+                        parse_error_loop_exit = True
+            
+            # Globally applied meta characters explanation
+            if args[arg] == MetaChar.now:
+                args[arg] = current_submission_time
+        if parse_error_loop_exit:
             print() # Print a newline for better readability
             continue
 
-        current_submission_time = datetime.now().strftime('%Y-%m-%d %H:%M')
-
-        container = realshlex(raw) # Initialize the parser
-
-        cmd = container.get_token()
-
-        # Check if cmd is an abbreviation if it is not a full command
-        if cmd not in available_commands:
-            possiblecmds = []
-            for command in available_commands:
-                if command.startswith(cmd):
-                    possiblecmds.append(command)
-            if len(possiblecmds) == 0: 
-                displayerror(f"Command or abbreviation '{cmd}' not found. Type 'help' for a list of commands.")
-                print() # Print a newline for better readability
-                continue
-            elif len(possiblecmds) == 1:
-                cmd = possiblecmds[0]
+        # Display what is being executed
+        execution_line = cmd
+        for argname, value in args.items():
+            execution_line += f' --{argname} '
+            if isinstance(value, MetaChar):
+                execution_line += f'{value.value}'
+            elif isinstance(value, list):
+                execution_line += ','.join(value)
             else:
-                displayerror(f"Command abbreviation '{cmd}' is ambiguous. Which of the following commands did you mean: {', '.join(possiblecmds)}?")
-                print() # Print a newline for better readability
-                continue
-        
-        # Parse the command arguments
-        unchecked_args = {"named": {}, "positional": []}
-
-        exit_loop = False
-        inflag = False
-        argname = None
-        number_of_args = 0
-        max_number_of_args = len(available_commands[cmd]['args']) if 'args' in available_commands[cmd] else 0
-        while (word := container.get_token()) is not None:
-            if number_of_args == max_number_of_args:
-                displayerror(f"Command '{cmd}' accepts {max_number_of_args} arguments. More arguments are passed than needed.")
-                print()
-                exit_loop = True
-                break
-            if not inflag and word == '--':
-                # Named argument flag
-                inflag = True
-            elif inflag:
-                # Named argument name
-                argname = word
-                if (not argname in available_commands[cmd]['args']) if 'args' in available_commands[cmd] else False:
-                    displayerror(f"Named argument '{argname}' is not recognized.")
-                    print()
-                    exit_loop = True
-                    break
-                if argname in unchecked_args["named"]:
-                    displayerror(f"Assigning two values to the same named argument '{argname}' makes no sense.")
-                    print()
-                    exit_loop = True
-                    break
-            elif argname is not None:
-                # Value for the named argument
-                unchecked_args["named"][argname] = word
-                inflag = False
-                argname = None
-                number_of_args += 1
-            else:
-                # Positional argument
-                unchecked_args["positional"].append(word)
-                number_of_args += 1
-        if exit_loop:
-            continue
-        if inflag:
-            # If we reach here and inflag is True, it means the last argument was a named argument without a value
-            displayerror("Incomplete named argument syntax at the end. Give a name and a value for the named argument.")
-            print()
-            continue
-        if argname is not None:
-            # If we reach here and argname is not None, it means the last argument was a named argument without a value
-            displayerror(f"Named argument '{argname}' is not assigned a value.")
-            print()
-            continue
-
-        # Check missing arguments and fill defaults if necessary
-        args = {}
-    
-        if 'args' in available_commands[cmd]:
-            exit_loop = False
-            for required_arg in available_commands[cmd]['args']:
-                if required_arg in unchecked_args["named"]:
-                    # Named argument provided
-                    args[required_arg] = unchecked_args["named"].pop(required_arg)
-                elif unchecked_args["positional"]:
-                    # Positional argument provided
-                    args[required_arg] = unchecked_args["positional"].pop(0)
-                elif 'default' in available_commands[cmd]['args'][required_arg]:
-                    # Default value provided for user-unprovided arguments
-                    args[required_arg] = available_commands[cmd]['args'][required_arg]['default']
-                else:
-                    # No value provided and no default value available
-                    displayerror(f"Command '{cmd}' requires argument '{required_arg}' but it is not provided.")
-                    print()
-                    exit_loop = True
-                    break
-            if exit_loop:
-                continue
-
-        # Fill substitutions for arguments
-        for arg, value in args.items():
-            if 'substitutions' in available_commands[cmd]['args'][arg]:
-                for sub, replacement in available_commands[cmd]['args'][arg]['substitutions'].items():
-                    if value == sub:
-                        args[arg] = replacement() if callable(replacement) else replacement
-                        break
-
-        # Check arguments' formats and transform them if necessary
-        exit_loop = False
-        for arg, value in args.items():
-            if available_commands[cmd]['args'][arg]['format'] == "time":
-                if value == "now":
-                    value = current_submission_time
-                else:
-                    try:
-                        datetime.strptime(value, '%Y-%m-%d %H:%M')
-                    except ValueError:
-                        displayerror(f"Argument '{arg}' is not a valid time input.")
-                        print()
-                        exit_loop = True
-                        break
-            elif available_commands[cmd]['args'][arg]['format'] == "regex":
-                try:
-                    regex_compile(value)
-                except RegexCompileError:
-                    displayerror(f"Argument '{arg}' is not a valid regular expression.")
-                    print()
-                    exit_loop = True
-                    break
-            elif available_commands[cmd]['args'][arg]['format'] == "text":
-                if len(value) == 0:
-                    displayerror(f"Argument '{arg}' cannot be empty.")
-                    print()
-                    exit_loop = True
-                    break
-            elif available_commands[cmd]['args'][arg]['format'] == "csv":
-                args[arg] = [v.strip() for v in value.split(',')]
-                if '' in args[arg]:
-                    displayerror(f"Values in '{arg}' cannot be empty.")
-                    print()
-                    exit_loop = True
-                    break
-        if exit_loop:
-            continue
-
-        displayinfo(f"Executing: {cmd + (' ' + ' '.join(f'--{k} "{",".join(v) if isinstance(v, list) else v}"' for k, v in args.items()) if args else '')}")
+                execution_line += f'"{value}"'
+        displayinfo(f"Executing: {execution_line}")
 
         print() # Print a newline for better readability
 
@@ -459,7 +449,7 @@ def main():
             display_table(
                 ["Command", "Description"],
                 [15, 0],
-                *[[cmd, details['help']] for cmd, details in available_commands.items()]
+                *[[cmd, details['help']] for cmd, details in commands.items() if cmd in available_commands]  # Filter out commands that are not available to the current user
             )
 
         elif cmd == "man":
@@ -467,13 +457,13 @@ def main():
             if args["command"] in available_commands:
                 print("Usage:")
                 syntax_text = args["command"]
-                if 'args' in available_commands[args["command"]]:
+                if 'args' in commands[args["command"]]:
                     syntax_text += ' '
-                    for arg, prop in available_commands[args["command"]]["args"].items():
+                    for arg, prop in commands[args["command"]]["args"].items():
                         syntax_text += f"[{arg}({prop['format']}{('|' + '|'.join(prop['substitutions'])) if 'substitutions' in prop else ''}){('="' + prop['default'] + '"') if 'default' in prop else ''}] " # Syntax for each argument
                 print(syntax_text.strip())
                 print("\nDescription:")
-                print(available_commands[args["command"]]['help'])
+                print(commands[args["command"]]['help'])
             else:
                 displayerror(f"No manual entry for command '{args["command"]}'.")
 
@@ -548,26 +538,37 @@ def main():
 
             elif cmd == "search":
 
+                # Meta characters transformation
+                if args["start"] == MetaChar.asterisk:
+                    actual_start = datetime.min.strftime('%Y-%m-%d %H:%M')
+                else:
+                    actual_start = args["start"]
+                if args["end"] == MetaChar.asterisk:
+                    actual_end = datetime.max.strftime('%Y-%m-%d %H:%M')
+                else:
+                    actual_end = args["end"]
+
                 # Input consistency checks
-                if not is_valid_time_interval(args["start"], args["end"]):
+                if not is_valid_time_interval(actual_start, actual_end):
                     displayerror("Time input is inconsistent. The end time must be later than the start time.")
                     print()
                     continue
 
                 # Constructing query parameters with non-fatal dynamic input validity check using stored data
                 params = []
-                if '*' not in args["roomIDs"]:
+                command_notice = False
+                if args["roomIDs"] != MetaChar.asterisk:
                     actual_room_ids = [room for room in args["roomIDs"] if connection.execute("SELECT 0 FROM rooms WHERE id=?", [room]).fetchone() is not None or (command_notice := True) and displaywarning(f"Room '{room}' does not exist and is skipped.")]
                     params.extend(actual_room_ids)
                 else:
-                    actual_room_ids = ['*']
-                if '*' not in args["usernames"]:
+                    actual_room_ids = MetaChar.asterisk
+                if args["usernames"] != MetaChar.asterisk:
                     actual_user_ids = [user for user in args["usernames"] if connection.execute("SELECT 0 FROM users WHERE username=?", [user]).fetchone() is not None or (command_notice := True) and displaywarning(f"User '{user}' does not exist and is skipped.")]
                     params.extend(actual_user_ids)
                 else:
-                    actual_user_ids = ['*']
-                params.append(args["start"])
-                params.append(args["end"])
+                    actual_user_ids = MetaChar.asterisk
+                params.append(actual_start)
+                params.append(actual_end)
                 params.append(args["usage"])
                 
                 print() if command_notice else None # Print a newline if there was a in-command notice
@@ -575,7 +576,7 @@ def main():
                 connection.create_function("in_interval", 4, sql_is_in_time_interval)
                 connection.create_function("regex", 2, sql_regex_match)
 
-                query = f"SELECT * FROM bookings WHERE {'roomID IN (' + ','.join('?' for _ in actual_room_ids) + ')' if actual_room_ids[0] != '*' else "TRUE"} AND {'username IN ('+','.join('?' for _ in actual_user_ids)+')' if actual_user_ids[0] != '*' else "TRUE"} AND in_interval(?, ?, start, end) AND regex(?, usage) ORDER BY strftime('%F %R', start), roomID"
+                query = f"SELECT * FROM bookings WHERE {'roomID IN (' + ','.join('?' for _ in actual_room_ids) + ')' if actual_room_ids != MetaChar.asterisk else "TRUE"} AND {'username IN ('+','.join('?' for _ in actual_user_ids)+')' if actual_user_ids != MetaChar.asterisk else "TRUE"} AND in_interval(?, ?, start, end) AND regex(?, usage) ORDER BY strftime('%F %R', start), roomID"
 
                 result_bookings = connection.execute(query, params).fetchall()
 
@@ -738,8 +739,18 @@ def main():
 
                 if ('*' not in args["roomIDs"] and '*' not in args["usernames"] and '*' not in args["start"] and '*' not in args["end"]) or input("You are using wildcard '*' in one or more arguments. This will cancel bookings massively. Are you sure you want to proceed? Enter 'yes' to confirm: ").lower() == "yes":
 
+                    # Meta characters transformation
+                    if args["start"] == MetaChar.asterisk:
+                        actual_start = datetime.min.strftime('%Y-%m-%d %H:%M')
+                    else:
+                        actual_start = args["start"]
+                    if args["end"] == MetaChar.asterisk:
+                        actual_end = datetime.max.strftime('%Y-%m-%d %H:%M')
+                    else:
+                        actual_end = args["end"]
+
                     # Input consistency checks
-                    if not is_valid_time_interval(args["start"], args["end"]):
+                    if not is_valid_time_interval(actual_start, actual_end):
                         displayerror("Time input is inconsistent. The end time must be later than the start time.")
                         print()
                         continue
@@ -747,20 +758,18 @@ def main():
                     # Constructing query parameters with non-fatal dynamic input validity check using stored data
                     params = []
                     command_notice = False
-                    actual_room_ids = args["roomIDs"]
-                    actual_usernames = args["usernames"]
-                    if '*' not in actual_room_ids:
-                        actual_room_ids = [room for room in actual_room_ids if connection.execute("SELECT 0 FROM rooms WHERE id=?", [room]).fetchone() is not None or (command_notice := True) and displaywarning(f"Room '{room}' does not exist and is skipped.")]
+                    if args["roomIDs"] != MetaChar.asterisk:
+                        actual_room_ids = [room for room in args["roomIDs"] if connection.execute("SELECT 0 FROM rooms WHERE id=?", [room]).fetchone() is not None or (command_notice := True) and displaywarning(f"Room '{room}' does not exist and is skipped.")]
                         params.extend(actual_room_ids)
                     else:
-                        actual_room_ids = ['*']
-                    if '*' not in actual_usernames:
-                        actual_usernames = [user for user in actual_usernames if connection.execute("SELECT 0 FROM users WHERE username=?", [user]).fetchone() is not None or (command_notice := True) and displaywarning(f"User '{user}' does not exist and is skipped.")]
+                        actual_room_ids = MetaChar.asterisk
+                    if args["usernames"] != MetaChar.asterisk:
+                        actual_usernames = [user for user in args["usernames"] if connection.execute("SELECT 0 FROM users WHERE username=?", [user]).fetchone() is not None or (command_notice := True) and displaywarning(f"User '{user}' does not exist and is skipped.")]
                         params.extend(actual_usernames)
-                    else:  
-                        actual_usernames = ['*']
-                    params.append(args["start"])
-                    params.append(args["end"])
+                    else:
+                        actual_usernames = MetaChar.asterisk
+                    params.append(actual_start)
+                    params.append(actual_end)
                     params.append(args["usage"])
 
                     print() if command_notice else None # Print a newline if there was a in-command notice
@@ -768,7 +777,7 @@ def main():
                     connection.create_function("in_interval", 4, sql_is_in_time_interval)
                     connection.create_function("regex", 2, sql_regex_match)
 
-                    query = f"SELECT * FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in actual_room_ids)+')' if actual_room_ids[0] != '*' else 'TRUE'} AND {'username IN ('+','.join('?' for _ in actual_usernames)+')' if actual_usernames[0] != '*' else 'TRUE'} AND in_interval(?, ?, start, end) AND regex(?, usage)"
+                    query = f"SELECT * FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in actual_room_ids)+')' if actual_room_ids != MetaChar.asterisk else 'TRUE'} AND {'username IN ('+','.join('?' for _ in actual_usernames)+')' if actual_usernames != MetaChar.asterisk else 'TRUE'} AND in_interval(?, ?, start, end) AND regex(?, usage)"
 
                     bookings = connection.execute(query, params).fetchall()
 
