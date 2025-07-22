@@ -83,8 +83,7 @@ If you run Booker from Python script, the files will be stored in the same direc
 If you run it as an executable, the files will be stored in the `_internal` directory next to the executable.
 
 ## Important Dev Notes
-I still don't have the time to write a full documentation for developers. But here are some important notes:
-- `realshlex` is a custom implementation of `shlex` that accepts all ASCII characters as `wordchars` except those used for Booker syntax. BUT THIS IS STILL NOT RIGHT. Will build a custom parser later.
+I still don't have the time to write a full documentation for developers...
 
 ## License
 This project is licensed under the MIT License by Chen Hang Tsz Henry. See the [LICENSE](LICENSE) file for details.
