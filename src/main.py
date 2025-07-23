@@ -1,6 +1,7 @@
 # Global imports
 from pathlib import Path
 from datetime import datetime
+from os import get_terminal_size
 
 # Global program functions
 def displayerror(msg: str): # Error Message: User must solve this to receive expected results
@@ -16,19 +17,27 @@ def displayinfo(msg: str): # Information Message: User may want to know this but
     print(f"\33[94m{msg}\33[0m")
 
 def display_table(headers: list[str], widths: list[int], *rows: list):
+    adjusted_widths = []
+    terminal_width = get_terminal_size().columns - len(headers) - 1
+    if terminal_width < (totalwidth := sum(widths)):
+        for width in widths:
+            adjusted_widths.append(int(width / totalwidth * terminal_width))
+    else:
+        adjusted_widths = widths
+
     line_buffer = ""
-    for header, width in zip(headers, widths):
+    for header, width in zip(headers, adjusted_widths):
         line_buffer += '|' + header.ljust(width)
     print(line_buffer + '|')
 
     line_buffer = ""
-    for width in widths:
+    for width in adjusted_widths:
         line_buffer += '|' + '-' * width
     print(line_buffer + '|')
 
     for row in rows:
         line_buffer = ""
-        for item, width in zip(row, widths):
+        for item, width in zip(row, adjusted_widths):
             line_buffer += '|' + str(item).ljust(width)
         print(line_buffer + '|')
 
@@ -462,14 +471,18 @@ def main():
 
             print() # Print a newline for better readability
 
+            print("Arguments of \33[3mcsv\33[0m values, commonly seen if more than one value is allowed in an argument (e.g. IDs), are separated by commas without spaces. Values cannot be empty. e.g. 'room1,room2,room3'.")
+            print("Arguments of \33[3mtime\33[0m values must be in the format 'YYYY-MM-DD HH:MM'. e.g. '2008-04-17 12:00'. Additionally, 'now' can be used to refer to current time.")
+            print("Arguments of \33[3mregex\33[0m values must be a valid regular expression. Matching is done from the beginning of the target text (invisible '^' has been prepended). e.g. '.' to match everything, or 'room\\d+$' to match room IDs that start with 'room' followed by one or more digits.")
+            print("Arguments of \33[3mtext\33[0m values can be any text that is not empty without special formatting.")
+            print("Wildcard '*' can often be used. It usually means \33[3mall\33[0m. For some time input, it can be used to remove respective time constraints according to context. e.g. Using '*' as start time and '2008-04-17' as end time means every record until '2008-04-17'.")
+
+            print() # Print a newline for better readability
+
             if currentuser is not None:
-                print("Arguments of \33[3mcsv\33[0m values, commonly seen if more than one value is allowed in an argument (e.g. IDs), are separated by commas without spaces. Values cannot be empty. e.g. 'room1,room2,room3'.")
-                print("Arguments of \33[3mtime\33[0m values must be in the format 'YYYY-MM-DD HH:MM'. e.g. '2008-04-17 12:00'. Additionally, 'now' can be used to refer to current time.")
-                print("Arguments of \33[3mregex\33[0m values must be a valid regular expression. Matching is done from the beginning of the target text (invisible '^' has been prepended). e.g. '.' to match everything, or 'room\\d+$' to match room IDs that start with 'room' followed by one or more digits.")
-                print("Arguments of \33[3mtext\33[0m values can be any text that is not empty without special formatting.")
-                print("Wildcard '*' can often be used. It usually means \33[3mall\33[0m. For some time input, it can be used to remove respective time constraints according to context. e.g. Using '*' as start time and '2008-04-17' as end time means every record until '2008-04-17'.")
+                print("List of commands:")
             else:
-                print("More commands are available after login.")
+                print("More commands are available after login:")
 
             print() # Print a newline for better readability
 
