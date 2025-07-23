@@ -854,16 +854,18 @@ def main():
 
                     # No exclusive lock as even if the user is deleted or the password is changed on the fly, data integrity and consistency are still maintained, without any errors occurring.
 
-                    # Non-fatal dynamic input validity check using stored data
+                    # Querying with non-fatal dynamic input validity check using stored data
+                    admin_status = 0
                     if connection.execute("SELECT username FROM users WHERE username=?", [args["username"]]).fetchone() is not None:
+                        admin_status = connection.execute("SELECT isadmin FROM users WHERE username=?", [args["username"]]).fetchone()[0]
                         displayinfo(f"User '{args['username']}' already exists. Changing password.")
                         command_notice = True
 
                     print() if command_notice else None # Print a newline if there was a in-command notice
 
                     pwhash = hash(inputpw("Password: ").encode()).digest()
-                    original_admin_status = connection.execute("SELECT isadmin FROM users WHERE username=?", [args["username"]]).fetchone()[0]
-                    connection.execute("INSERT OR REPLACE INTO users (username, pwhash, isadmin) VALUES (?, ?, ?)", (args["username"], pwhash, original_admin_status)) # Insert or update the user
+                    
+                    connection.execute("INSERT OR REPLACE INTO users (username, pwhash, isadmin) VALUES (?, ?, ?)", (args["username"], pwhash, admin_status)) # Insert or update the user
                     displaysuccess(f"User '{args['username']}' registered or updated successfully.")
 
                 elif cmd == "dereg":
