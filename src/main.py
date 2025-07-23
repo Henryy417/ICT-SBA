@@ -333,12 +333,13 @@ def main():
                         else:
                             cmd = current_word
                     elif current_word.startswith('--') :
-                        if 'args' not in commands[cmd] or current_word not in commands[cmd]['args']:
-                            displaywarning(f"Unknown argument '{current_word}' for command '{cmd}'. Argument name discarded.")
+                        argname = current_word[2:]
+                        if 'args' not in commands[cmd] or argname not in commands[cmd]['args']:
+                            displaywarning(f"Unknown argument '{argname}' for command '{cmd}'. Argument name discarded.")
                         else:
-                            unfilled_named_args.append(current_word[2:])
+                            unfilled_named_args.append(argname)
                     elif unfilled_named_args:
-                        args[argname := unfilled_named_args.pop(0)] = MetaChar(current_word) if current_word in MetaChar else current_word
+                        args[unfilled_named_args.pop(0)] = MetaChar(current_word) if current_word in MetaChar else current_word
                     else:
                         positional_args.append(MetaChar(current_word) if current_word in MetaChar else current_word)
                 in_quote = False
@@ -454,7 +455,7 @@ def main():
             print("Words are classified as the command, argument names, and argument values.")
             print("Command abbreviations are allowed. Enter the first few letters of a command. Note that the parser tries to see the input as a complete command before seeking a possible abbreviation.")
             print("After entering the command, enter arguments as separate words. Arguments can be either named or positional. For named arguments, use double hyphen '--' in front of the argument name, and then the argument value as another word. For positional arguments, simply enter the value as a word.")
-            print("If you want to use spaces or characters that are not ASCII printable characters in a single argument value, please quote them with either single or double quotes. Commands and argument names cannot be quoted else they will be treated as argument values. You can enter literal double hyphens '--' in argument values by using this.")
+            print("If you want to use spaces in a single argument value, please quote them with either single or double quotes. Commands and argument names cannot be quoted else they will be treated as literal argument values. You can enter literal double hyphens '--' and special-meaning characters (e.g. '*' and 'now') in argument values by using this.")
             print("If you want to use quotes literally in an argument value, please escape them with a backslash '\\'.")
             print("Default values of arguments, if exist, will be filled when not enough arguments are provided.")
             print("Although the parser tries to tolerate input errors, it is still recommended to follow the syntax strictly to avoid unexpected results.")
@@ -486,7 +487,7 @@ def main():
                 if 'args' in commands[args["command"]]:
                     syntax_text += ' '
                     for arg, prop in commands[args["command"]]["args"].items():
-                        syntax_text += f"[{arg}({prop['format']}{('|' + '|'.join(prop['substitutions'])) if 'substitutions' in prop else ''}){('="' + prop['default'] + '"') if 'default' in prop else ''}] " # Syntax for each argument
+                        syntax_text += f"[{arg}({prop['format']}{('|' + '|'.join(special_char.value for special_char in prop['special_chars'])) if 'special_chars' in prop else ''}){('=' + (prop['default'].value if isinstance(prop['default'], MetaChar) else '"' + prop['default'] + '"')) if 'default' in prop else ''}] " # Syntax for each argument
                 print(syntax_text.strip())
                 print("\nDescription:")
                 print(commands[args["command"]]['help'])
@@ -847,7 +848,8 @@ def main():
                     print() if command_notice else None # Print a newline if there was a in-command notice
 
                     pwhash = hash(inputpw("Password: ").encode()).digest()
-                    connection.execute("INSERT OR REPLACE INTO users (username, pwhash) VALUES (?, ?)", (args["username"], pwhash))
+                    original_admin_status = connection.execute("SELECT isadmin FROM users WHERE username=?", [args["username"]]).fetchone()[0]
+                    connection.execute("INSERT OR REPLACE INTO users (username, pwhash, isadmin) VALUES (?, ?, ?)", (args["username"], pwhash, original_admin_status)) # Insert or update the user
                     displaysuccess(f"User '{args['username']}' registered or updated successfully.")
 
                 elif cmd == "dereg":
