@@ -1,5 +1,5 @@
 /src/data.db
 /src/error.log
+/src/__pycache__/
 /dist/
 /build/
-/src/__pycache__/
