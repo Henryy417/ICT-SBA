@@ -75,7 +75,7 @@ def main():
         else:
             return start_dt < end_dt
 
-    # Functional Functions for SQL: NO INPUT VALIDATION!
+    # Functional Functions for SQL
     def sql_is_in_time_interval(interval_start: str, interval_end: str, target_start: str, target_end: str) -> bool:
         interval_start_dt = datetime.strptime(interval_start, '%Y-%m-%d %H:%M')
         interval_end_dt = datetime.strptime(interval_end, '%Y-%m-%d %H:%M')
@@ -401,7 +401,7 @@ def main():
         if len(positional_args) > 0:
             displaywarning(f"Too many arguments for command '{cmd}'. Expected {len(commands[cmd]['args']) if 'args' in commands[cmd] else 0}, got {len(args) + len(positional_args)}.")
 
-        # Validate argument values
+        # Validate argument values and transformation by formats
         for arg in args:
             # Convert MetaChar to its value
             if isinstance(args[arg], MetaChar):
@@ -417,7 +417,7 @@ def main():
                         break
                 elif commands[cmd]['args'][arg]['format'] == 'time':
                     try:
-                        datetime.strptime(args[arg], '%Y-%m-%d %H:%M')
+                        args[arg] = datetime.strptime(args[arg], '%Y-%m-%d %H:%M').strftime('%Y-%m-%d %H:%M')
                     except ValueError:
                         displayerror(f"Time argument '{arg}' is not a valid time input.")
                         parse_error_loop_exit = True
@@ -617,7 +617,7 @@ def main():
                 connection.create_function("in_interval", 4, sql_is_in_time_interval)
                 connection.create_function("regex", 2, sql_regex_match)
 
-                query = f"SELECT * FROM bookings WHERE {'roomID IN (' + ','.join('?' for _ in actual_room_ids) + ')' if actual_room_ids != MetaChar.asterisk else "TRUE"} AND {'username IN ('+','.join('?' for _ in actual_user_ids)+')' if actual_user_ids != MetaChar.asterisk else "TRUE"} AND in_interval(?, ?, start, end) AND regex(?, usage) ORDER BY strftime('%F %R', start), roomID"
+                query = f"SELECT * FROM bookings WHERE {'roomID IN (' + ','.join('?' for _ in actual_room_ids) + ')' if actual_room_ids != MetaChar.asterisk else "TRUE"} AND {'username IN ('+','.join('?' for _ in actual_user_ids)+')' if actual_user_ids != MetaChar.asterisk else "TRUE"} AND in_interval(?, ?, start, end) AND regex(?, usage) ORDER BY start, roomID"
 
                 result_bookings = connection.execute(query, params).fetchall()
 
@@ -687,7 +687,7 @@ def main():
                         command_notice = True
                         continue
 
-                    connection.execute("INSERT INTO bookings (roomID, username, start, end, usage) VALUES (?, ?, strftime('%F %R', ?), strftime('%F %R', ?), ?)", (room_id, currentuser, args["start"], args["end"], args["usage"]))
+                    connection.execute("INSERT INTO bookings (roomID, username, start, end, usage) VALUES (?, ?, ?, ?, ?)", (room_id, currentuser, args["start"], args["end"], args["usage"]))
                     connection.commit() # Commit the addition to the database before fetching the booking record
                     result_bookings.append(connection.execute("SELECT * FROM bookings WHERE ID = (SELECT seq FROM sqlite_sequence WHERE name = 'bookings')").fetchone()) # Fetch the newly added booking
 
@@ -778,7 +778,7 @@ def main():
 
             elif cmd == "clear":
 
-                if ('*' not in args["roomIDs"] and '*' not in args["usernames"] and '*' not in args["start"] and '*' not in args["end"]) or input("You are using wildcard '*' in one or more arguments. This will cancel bookings massively. Are you sure you want to proceed? Enter 'yes' to confirm: ").lower() == "yes":
+                if (MetaChar.asterisk in (args["roomIDs"], args["usernames"], args["start"], args["end"])) or input("You are using wildcard '*' in one or more arguments. This will cancel bookings massively. Are you sure you want to proceed? Enter 'yes' to confirm: ").lower() == "yes":
 
                     # Meta characters transformation
                     if args["start"] == MetaChar.asterisk:
