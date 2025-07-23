@@ -43,9 +43,10 @@ def display_table(headers: list[str], widths: list[int], *rows: list):
 
 # Program information
 INFO = "Booker v2.0"
+FILEDIR = Path(__file__).resolve().parent
 
 # Customizable program information
-DB_PATH = Path(__file__).resolve().parent/"data.db"
+DB_PATH = FILEDIR/"data.db"
 
 def main():
     ## Initialization ##
@@ -522,11 +523,11 @@ def main():
             print() # Print a newline for better readability
 
             # Search for license file in the same directory and the parent directory as this script
-            if (Path(__file__).resolve().parent/"LICENSE").exists():
-                with open(Path(__file__).resolve().parent/"LICENSE", "r") as license_file:
+            if (FILEDIR/"LICENSE").exists():
+                with open(FILEDIR/"LICENSE", "r") as license_file:
                     print(license_file.read())
-            elif (Path(__file__).resolve().parent.parent/"LICENSE").exists():
-                with open(Path(__file__).resolve().parent.parent/"LICENSE", "r") as license_file:
+            elif (FILEDIR.parent/"LICENSE").exists():
+                with open(FILEDIR.parent/"LICENSE", "r") as license_file:
                     print(license_file.read())
             else:
                 displayerror("No license file is found. This may indicate an illegal distribution.\nThis program is originally released under the MIT License by Chen Hang Tsz Henry. Please refer to the source code repository for more information.")
@@ -1076,7 +1077,7 @@ if __name__ == "__main__":
 
         displayerror(f"Program terminated due to unexpectedly error.\nError info:\n{format_exc()}")
         print() # Print a newline for better readability
-        with open(Path(__file__).resolve().parent/"error.log", "a") as f:
+        with open(FILEDIR/"error.log", "a") as f:
             f.write(str(datetime.now())+"\n"+format_exc()+"\n\n\n")
     finally:
         # Rollback of any uncommitted changes in the current cycle to the database will be done automatically on exit
