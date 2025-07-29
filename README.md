@@ -71,6 +71,7 @@ These are the currently available commands in Booker:
 - **text**: Free text that is not empty without special formatting
 - **regex**: Regular expression pattern for flexible matching
 > Note: Some arguments accept a wildcard (`*`) for flexible matching.
+> Note: The `me` special word can be used to refer to the current user.
 
 ### Error Handling
 - Errors, warnings, and info messages are color-coded.

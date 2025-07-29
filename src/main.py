@@ -90,10 +90,11 @@ def main():
     currentuser = None  # Placeholder for current user
     isadmin = False  # Placeholder for admin status
 
-    # Command special flag characters
-    class MetaChar(Enum):
+    # Command special flag words 
+    class MetaWord(Enum):
         asterisk = '*'
         now = 'now'
+        me = 'me'
     
     # Command definitions
     commands = {
@@ -155,25 +156,25 @@ def main():
         },
         "search": {
             "args": {
-                "roomIDs": {"format": "csv", "default": MetaChar.asterisk, "special_chars": [MetaChar.asterisk]},
-                "usernames": {"format": "csv", "default": MetaChar.asterisk, "special_chars": [MetaChar.asterisk]},
-                "start": {"format": "time", "default": MetaChar.now, "special_chars": [MetaChar.now, MetaChar.asterisk]},
-                "end": {"format": "time", "default": MetaChar.asterisk, "special_chars": [MetaChar.now, MetaChar.asterisk]},
+                "roomIDs": {"format": "csv", "default": MetaWord.asterisk, "special_words": [MetaWord.asterisk]},
+                "usernames": {"format": "csv", "default": MetaWord.asterisk, "special_words": [MetaWord.asterisk, MetaWord.me]},
+                "start": {"format": "time", "default": MetaWord.now, "special_words": [MetaWord.now, MetaWord.asterisk]},
+                "end": {"format": "time", "default": MetaWord.asterisk, "special_words": [MetaWord.now, MetaWord.asterisk]},
                 "usage": {"format": "regex", "default": ""}
             },
             "help": "List bookings of the specified rooms booked by specified users within a given time. Usage can be filtered using a regular expression.",
             "use_requirement": "user"
         },
         "show": {
-            "args": {"bookingIDs": {"format": "csv", "default": MetaChar.asterisk, "special_chars": [MetaChar.asterisk]}},
+            "args": {"bookingIDs": {"format": "csv", "default": MetaWord.asterisk, "special_words": [MetaWord.asterisk]}},
             "help": "Show bookings of specified booking IDs.",
             "use_requirement": "user"
         },
         "book": {
             "args": {
                 "roomIDs": {"format": "csv"},
-                "start": {"format": "time", "default": MetaChar.now, "special_chars": [MetaChar.now]},
-                "end": {"format": "time", "special_chars": [MetaChar.now]},
+                "start": {"format": "time", "default": MetaWord.now, "special_words": [MetaWord.now]},
+                "end": {"format": "time", "special_words": [MetaWord.now]},
                 "usage": {"format": "text"}
             },
             "help": "Make a reservation for specified rooms at a given time.",
@@ -191,10 +192,10 @@ def main():
         },
         "clear": {
             "args": {
-                "roomIDs": {"format": "csv", "special_chars": [MetaChar.asterisk]},
-                "usernames": {"format": "csv", "special_chars": [MetaChar.asterisk]},
-                "start": {"format": "time", "special_chars": [MetaChar.now, MetaChar.asterisk]},
-                "end": {"format": "time", "special_chars": [MetaChar.now, MetaChar.asterisk]},
+                "roomIDs": {"format": "csv", "special_words": [MetaWord.asterisk]},
+                "usernames": {"format": "csv", "special_words": [MetaWord.asterisk, MetaWord.me]},
+                "start": {"format": "time", "special_words": [MetaWord.now, MetaWord.asterisk]},
+                "end": {"format": "time", "special_words": [MetaWord.now, MetaWord.asterisk]},
                 "usage": {"format": "regex", "default": ""}
             },
             "help": "Cancel bookings to make available the specified rooms booked by specified users within a given time. Usage can be filtered using a regular expression. Standard users can only clear their own future bookings.",
@@ -349,9 +350,9 @@ def main():
                         else:
                             unfilled_named_args.append(argname)
                     elif unfilled_named_args:
-                        args[unfilled_named_args.pop(0)] = MetaChar(current_word) if current_word in MetaChar else current_word
+                        args[unfilled_named_args.pop(0)] = MetaWord(current_word) if current_word in MetaWord else current_word
                     else:
-                        positional_args.append(MetaChar(current_word) if current_word in MetaChar else current_word)
+                        positional_args.append(MetaWord(current_word) if current_word in MetaWord else current_word)
                 in_quote = False
                 escaped = False
                 current_word = ''
@@ -403,12 +404,12 @@ def main():
 
         # Validate argument values and transformation by formats
         for arg in args:
-            # Convert MetaChar to its value
-            if isinstance(args[arg], MetaChar):
-                if 'special_chars' not in commands[cmd]['args'][arg] or args[arg] not in commands[cmd]['args'][arg]['special_chars']:
+            # Convert MetaWord to its value
+            if isinstance(args[arg], MetaWord):
+                if 'special_words' not in commands[cmd]['args'][arg] or args[arg] not in commands[cmd]['args'][arg]['special_words']:
                     args[arg] = args[arg].value
                     
-            if not isinstance(args[arg], MetaChar):
+            if not isinstance(args[arg], MetaWord):
                 if commands[cmd]['args'][arg]['format'] == 'csv':
                     args[arg] = args[arg].split(',')
                     if '' in args[arg]:
@@ -432,8 +433,8 @@ def main():
                         displayerror(f"Text argument '{arg}' cannot be empty.")
                         parse_error_loop_exit = True
             
-            # Globally applied meta characters explanation
-            if args[arg] == MetaChar.now:
+            # Globally applied meta words explanation
+            if args[arg] == MetaWord.now:
                 args[arg] = current_submission_time
         if parse_error_loop_exit:
             print() # Print a newline for better readability
@@ -443,10 +444,10 @@ def main():
         execution_line = cmd
         for argname, value in args.items():
             execution_line += f' --{argname} '
-            if isinstance(value, MetaChar):
+            if isinstance(value, MetaWord):
                 execution_line += f'{value.value}'
             elif isinstance(value, list):
-                execution_line += ','.join(value)
+                execution_line += '\'' + ','.join(value) + '\''
             else:
                 execution_line += f'"{value}"'
         displayinfo(f"Executing: {execution_line}")
@@ -465,7 +466,7 @@ def main():
             print("Words are classified as the command, argument names, and argument values.")
             print("Command abbreviations are allowed. Enter the first few letters of a command. Note that the parser tries to see the input as a complete command before seeking a possible abbreviation.")
             print("After entering the command, enter arguments as separate words. Arguments can be either named or positional. For named arguments, use double hyphen '--' in front of the argument name, and then the argument value as another word. For positional arguments, simply enter the value as a word.")
-            print("If you want to use spaces in a single argument value, please quote them with either single or double quotes. Commands and argument names cannot be quoted else they will be treated as literal argument values. You can enter literal double hyphens '--' and special-meaning characters (e.g. '*' and 'now') in argument values by using this.")
+            print("If you want to use spaces in a single argument value, please quote them with either single or double quotes. Commands and argument names cannot be quoted else they will be treated as literal argument values. You can enter literal double hyphens '--' and special-meaning words (e.g. '*', 'now' and 'me') in argument values by using this.")
             print("If you want to use quotes literally in an argument value, please escape them with a backslash '\\'.")
             print("Default values of arguments, if exist, will be filled when not enough arguments are provided.")
             print("Although the parser tries to tolerate input errors, it is still recommended to follow the syntax strictly to avoid unexpected results.")
@@ -501,7 +502,7 @@ def main():
                 if 'args' in commands[args["command"]]:
                     syntax_text += ' '
                     for arg, prop in commands[args["command"]]["args"].items():
-                        syntax_text += f"[{arg}({prop['format']}{('|' + '|'.join(special_char.value for special_char in prop['special_chars'])) if 'special_chars' in prop else ''}){('=' + (prop['default'].value if isinstance(prop['default'], MetaChar) else '"' + prop['default'] + '"')) if 'default' in prop else ''}] " # Syntax for each argument
+                        syntax_text += f"[{arg}({prop['format']}{('|' + '|'.join(special_word.value for special_word in prop['special_words'])) if 'special_words' in prop else ''}){('=' + (prop['default'].value if isinstance(prop['default'], MetaWord) else '"' + prop['default'] + '"')) if 'default' in prop else ''}] " # Syntax for each argument
                 print(syntax_text.strip())
                 print("\nDescription:")
                 print(commands[args["command"]]['help'])
@@ -579,12 +580,12 @@ def main():
 
             elif cmd == "search":
 
-                # Meta characters transformation
-                if args["start"] == MetaChar.asterisk:
+                # Meta words transformation
+                if args["start"] == MetaWord.asterisk:
                     actual_start = datetime.min.strftime('%Y-%m-%d %H:%M')
                 else:
                     actual_start = args["start"]
-                if args["end"] == MetaChar.asterisk:
+                if args["end"] == MetaWord.asterisk:
                     actual_end = datetime.max.strftime('%Y-%m-%d %H:%M')
                 else:
                     actual_end = args["end"]
@@ -598,16 +599,19 @@ def main():
                 # Constructing query parameters with non-fatal dynamic input validity check using stored data
                 params = []
                 command_notice = False
-                if args["roomIDs"] != MetaChar.asterisk:
+                if args["roomIDs"] != MetaWord.asterisk:
                     actual_room_ids = [room for room in args["roomIDs"] if connection.execute("SELECT 0 FROM rooms WHERE id=?", [room]).fetchone() is not None or (command_notice := True) and displaywarning(f"Room '{room}' does not exist and is skipped.")]
                     params.extend(actual_room_ids)
                 else:
-                    actual_room_ids = MetaChar.asterisk
-                if args["usernames"] != MetaChar.asterisk:
-                    actual_user_ids = [user for user in args["usernames"] if connection.execute("SELECT 0 FROM users WHERE username=?", [user]).fetchone() is not None or (command_notice := True) and displaywarning(f"User '{user}' does not exist and is skipped.")]
+                    actual_room_ids = MetaWord.asterisk
+                if args["usernames"] != MetaWord.asterisk:
+                    if args["usernames"] == MetaWord.me:
+                        actual_user_ids = [currentuser]
+                    else:
+                        actual_user_ids = [user for user in args["usernames"] if connection.execute("SELECT 0 FROM users WHERE username=?", [user]).fetchone() is not None or (command_notice := True) and displaywarning(f"User '{user}' does not exist and is skipped.")]
                     params.extend(actual_user_ids)
                 else:
-                    actual_user_ids = MetaChar.asterisk
+                    actual_user_ids = MetaWord.asterisk
                 params.append(actual_start)
                 params.append(actual_end)
                 params.append(args["usage"])
@@ -617,7 +621,7 @@ def main():
                 connection.create_function("in_interval", 4, sql_is_in_time_interval)
                 connection.create_function("regex", 2, sql_regex_match)
 
-                query = f"SELECT * FROM bookings WHERE {'roomID IN (' + ','.join('?' for _ in actual_room_ids) + ')' if actual_room_ids != MetaChar.asterisk else "TRUE"} AND {'username IN ('+','.join('?' for _ in actual_user_ids)+')' if actual_user_ids != MetaChar.asterisk else "TRUE"} AND in_interval(?, ?, start, end) AND regex(?, usage) ORDER BY start, roomID"
+                query = f"SELECT * FROM bookings WHERE {'roomID IN (' + ','.join('?' for _ in actual_room_ids) + ')' if actual_room_ids != MetaWord.asterisk else "TRUE"} AND {'username IN ('+','.join('?' for _ in actual_user_ids)+')' if actual_user_ids != MetaWord.asterisk else "TRUE"} AND in_interval(?, ?, start, end) AND regex(?, usage) ORDER BY start, roomID"
 
                 result_bookings = connection.execute(query, params).fetchall()
 
@@ -778,14 +782,14 @@ def main():
 
             elif cmd == "clear":
 
-                if (MetaChar.asterisk in (args["roomIDs"], args["usernames"], args["start"], args["end"])) or input("You are using wildcard '*' in one or more arguments. This will cancel bookings massively. Are you sure you want to proceed? Enter 'yes' to confirm: ").lower() == "yes":
+                if (MetaWord.asterisk in (args["roomIDs"], args["usernames"], args["start"], args["end"])) or input("You are using wildcard '*' in one or more arguments. This will cancel bookings massively. Are you sure you want to proceed? Enter 'yes' to confirm: ").lower() == "yes":
 
-                    # Meta characters transformation
-                    if args["start"] == MetaChar.asterisk:
+                    # Meta words transformation
+                    if args["start"] == MetaWord.asterisk:
                         actual_start = datetime.min.strftime('%Y-%m-%d %H:%M')
                     else:
                         actual_start = args["start"]
-                    if args["end"] == MetaChar.asterisk:
+                    if args["end"] == MetaWord.asterisk:
                         actual_end = datetime.max.strftime('%Y-%m-%d %H:%M')
                     else:
                         actual_end = args["end"]
@@ -799,16 +803,19 @@ def main():
                     # Constructing query parameters with non-fatal dynamic input validity check using stored data
                     params = []
                     command_notice = False
-                    if args["roomIDs"] != MetaChar.asterisk:
+                    if args["roomIDs"] != MetaWord.asterisk:
                         actual_room_ids = [room for room in args["roomIDs"] if connection.execute("SELECT 0 FROM rooms WHERE id=?", [room]).fetchone() is not None or (command_notice := True) and displaywarning(f"Room '{room}' does not exist and is skipped.")]
                         params.extend(actual_room_ids)
                     else:
-                        actual_room_ids = MetaChar.asterisk
-                    if args["usernames"] != MetaChar.asterisk:
-                        actual_usernames = [user for user in args["usernames"] if connection.execute("SELECT 0 FROM users WHERE username=?", [user]).fetchone() is not None or (command_notice := True) and displaywarning(f"User '{user}' does not exist and is skipped.")]
+                        actual_room_ids = MetaWord.asterisk
+                    if args["usernames"] != MetaWord.asterisk:
+                        if args["usernames"] == MetaWord.me:
+                            actual_usernames = [currentuser]
+                        else:
+                            actual_usernames = [user for user in args["usernames"] if connection.execute("SELECT 0 FROM users WHERE username=?", [user]).fetchone() is not None or (command_notice := True) and displaywarning(f"User '{user}' does not exist and is skipped.")]
                         params.extend(actual_usernames)
                     else:
-                        actual_usernames = MetaChar.asterisk
+                        actual_usernames = MetaWord.asterisk
                     params.append(actual_start)
                     params.append(actual_end)
                     params.append(args["usage"])
@@ -818,7 +825,7 @@ def main():
                     connection.create_function("in_interval", 4, sql_is_in_time_interval)
                     connection.create_function("regex", 2, sql_regex_match)
 
-                    query = f"SELECT * FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in actual_room_ids)+')' if actual_room_ids != MetaChar.asterisk else 'TRUE'} AND {'username IN ('+','.join('?' for _ in actual_usernames)+')' if actual_usernames != MetaChar.asterisk else 'TRUE'} AND in_interval(?, ?, start, end) AND regex(?, usage)"
+                    query = f"SELECT * FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in actual_room_ids)+')' if actual_room_ids != MetaWord.asterisk else 'TRUE'} AND {'username IN ('+','.join('?' for _ in actual_usernames)+')' if actual_usernames != MetaWord.asterisk else 'TRUE'} AND in_interval(?, ?, start, end) AND regex(?, usage)"
 
                     bookings = connection.execute(query, params).fetchall()
 
