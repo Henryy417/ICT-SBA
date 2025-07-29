@@ -64,7 +64,7 @@ def main():
         global available_commands
         available_commands = []
         for cmd, details in commands.items():
-            if 'use_requirement' not in details or (details['use_requirement'] == "admin" and isadmin or details['use_requirement'] == "user" and currentuser is not None):
+            if 'use_requirement' not in details or (details['use_requirement'] == 'admin' and isadmin or details['use_requirement'] == 'user' and currentuser is not None):
                 available_commands.append(cmd)
 
     def is_valid_time_interval(start: str, end: str, allow_equal: bool = False) -> bool:
@@ -288,6 +288,13 @@ def main():
         if len(raw) == 0:
             continue
 
+        # Check if input contains only printable characters
+        # Note: This limitation is to prevent output pollution
+        if not raw.isprintable():
+            displayerror("Input contains non-printable characters and is blocked. Please replace them. e.g. Use spaces instead of tabs.")
+            print()
+            continue
+
         # Parse the input valid command and arguments
         cmd = None
         args = {}
@@ -306,7 +313,7 @@ def main():
 
         parse_error_loop_exit = False
         while index < len(raw) + 1:
-            if index == len(raw) or raw[index] in (' ','\t') and not in_quote:
+            if index == len(raw) or raw[index] == ' ' and not in_quote:
                 if current_is_quoted:
                     if unfilled_named_args:
                         args[unfilled_named_args.pop(0)] = current_word
@@ -459,7 +466,7 @@ def main():
         command_notice = False
 
         # Commands that can be used before login
-        if cmd == "help":
+        if cmd == 'help':
 
             print("Use 'man' to receive more information about a specific command.")
             print("Your input consists of words. Each word is separated by a space outside quotes.")
@@ -494,7 +501,7 @@ def main():
                 *[[cmd, details['help']] for cmd, details in commands.items() if cmd in available_commands]  # Filter out commands that are not available to the current user
             )
 
-        elif cmd == "man":
+        elif cmd == 'man':
 
             if args["command"] in available_commands:
                 print("Usage:")
@@ -509,7 +516,7 @@ def main():
             else:
                 displayerror(f"No manual entry for command '{args["command"]}'.")
 
-        elif cmd == "exit":
+        elif cmd == 'exit':
 
             # End database access
             connection.commit() # Commit any previous changes to the database and avoid database lock issues
@@ -517,7 +524,7 @@ def main():
 
             raise SystemExit(0)
 
-        elif cmd == "version":
+        elif cmd == 'version':
 
             print(INFO)
             
@@ -533,11 +540,11 @@ def main():
             else:
                 displayerror("No license file is found. This may indicate an illegal distribution.\nThis program is originally released under the MIT License by Chen Hang Tsz Henry. Please refer to the source code repository for more information.")
 
-        elif cmd == "cls":
+        elif cmd == 'cls':
 
-            sysexec("cls" if sysname == "nt" else "clear") # Compatible with older Windows without PowerShell
+            sysexec("cls" if sysname == 'nt' else "clear") # Compatible with older Windows without PowerShell
 
-        elif cmd == "login":
+        elif cmd == 'login':
 
             pwhash = hash(inputpw("Password: ").encode()).digest()
 
@@ -553,7 +560,7 @@ def main():
 
         # Commands that can be used only after login
         elif currentuser is not None:
-            if cmd == "cp":
+            if cmd == 'cp':
 
                 if (new_password := inputpw("New Password: ")) == inputpw("Confirm New Password: "):
                     new_pwhash = hash(new_password.encode()).digest()
@@ -564,7 +571,7 @@ def main():
                 else:
                     displayerror("Passwords do not match. Please try again.")
 
-            elif cmd == "rooms":
+            elif cmd == 'rooms':
 
                 result_rooms = connection.execute("SELECT id, description FROM rooms ORDER BY id").fetchall()
 
@@ -578,7 +585,7 @@ def main():
                 else:
                     displaywarning("No rooms found. Please create rooms using the 'build' command.")
 
-            elif cmd == "search":
+            elif cmd == 'search':
 
                 # Meta words transformation
                 if args["start"] == MetaWord.asterisk:
@@ -635,7 +642,7 @@ def main():
                 else:
                     displaysuccess("No bookings found. The time slot is free.")
 
-            elif cmd == "show":
+            elif cmd == 'show':
 
                 # Fetching results with non-fatal dynamic input validity check using stored data
                 if '*' not in args["bookingIDs"]:
@@ -662,7 +669,7 @@ def main():
                 else:
                     displayerror("No bookings found.")
 
-            elif cmd == "book":
+            elif cmd == 'book':
                 
                 connection.execute("BEGIN EXCLUSIVE") # Start an exclusive transaction to prevent other users from modifying the database after validative searching
                 connection.create_function("in_interval", 4, sql_is_in_time_interval)
@@ -707,7 +714,7 @@ def main():
                 else:
                     displayerror("No bookings were created.")
 
-            elif cmd == "modify":
+            elif cmd == 'modify':
 
                 # No exclusive lock as even if the booking is deleted or modified on the fly, data integrity and consistency are still maintained, without any errors occurring.
 
@@ -744,7 +751,7 @@ def main():
                 else:
                     displayerror("No bookings were modified.")
 
-            elif cmd == "cancel":
+            elif cmd == 'cancel':
 
                 # No exclusive lock as even if the user is deleted or the password is changed on the fly, data integrity and consistency are still maintained, without any errors occurring.
 
@@ -780,9 +787,9 @@ def main():
                 else:
                     displayerror("No bookings were cancelled.")
 
-            elif cmd == "clear":
+            elif cmd == 'clear':
 
-                if (MetaWord.asterisk in (args["roomIDs"], args["usernames"], args["start"], args["end"])) or input("You are using wildcard '*' in one or more arguments. This will cancel bookings massively. Are you sure you want to proceed? Enter 'yes' to confirm: ").lower() == "yes":
+                if (MetaWord.asterisk in (args["roomIDs"], args["usernames"], args["start"], args["end"])) or input("You are using wildcard '*' in one or more arguments. This will cancel bookings massively. Are you sure you want to proceed? Enter 'yes' to confirm: ").lower() == 'yes':
 
                     # Meta words transformation
                     if args["start"] == MetaWord.asterisk:
@@ -857,7 +864,7 @@ def main():
                 
             elif isadmin:
 
-                if cmd == "reg":
+                if cmd == 'reg':
 
                     # No exclusive lock as even if the user is deleted or the password is changed on the fly, data integrity and consistency are still maintained, without any errors occurring.
 
@@ -875,9 +882,9 @@ def main():
                     connection.execute("INSERT OR REPLACE INTO users (username, pwhash, isadmin) VALUES (?, ?, ?)", (args["username"], pwhash, admin_status)) # Insert or update the user
                     displaysuccess(f"User '{args['username']}' registered or updated successfully.")
 
-                elif cmd == "dereg":
+                elif cmd == 'dereg':
 
-                    if input("Are you sure you want to deregister the users? Their bookings will be as well cancelled. Enter 'yes' to confirm: ").lower() == "yes":
+                    if input("Are you sure you want to deregister the users? Their bookings will be as well cancelled. Enter 'yes' to confirm: ").lower() == 'yes':
 
                         # No exclusive lock as even if the user is deleted or the password is changed on the fly, data integrity and consistency are still maintained, without any errors occurring.
 
@@ -922,7 +929,7 @@ def main():
                     else:
                         displayerror("Deregistration cancelled.")
 
-                elif cmd == "auth":
+                elif cmd == 'auth':
 
                     # No exclusive lock as even if the user is authorized or deauthorized on the fly, data integrity and consistency are still maintained, without any errors occurring.
 
@@ -949,7 +956,7 @@ def main():
                     else:
                         displayerror("No users were authorized.")
 
-                elif cmd == "deauth":
+                elif cmd == 'deauth':
 
                     # No exclusive lock as even if the user is authorized or deauthorized on the fly, data integrity and consistency are still maintained, without any errors occurring.
 
@@ -980,7 +987,7 @@ def main():
                     else:
                         displayerror("No users were deauthorized.")
 
-                elif cmd == "users":
+                elif cmd == 'users':
 
                     result_users = connection.execute("SELECT * FROM users ORDER BY username").fetchall()
 
@@ -994,7 +1001,7 @@ def main():
                     else:
                         displaywarning("No users found. Please register users using the 'reg' command.")
 
-                elif cmd == "build":
+                elif cmd == 'build':
 
                     # No exclusive lock as even if the user is deleted or the password is changed on the fly, data integrity and consistency are still maintained, without any errors occurring.
 
@@ -1020,9 +1027,9 @@ def main():
                     else:
                         displayerror("No rooms were created.")
 
-                elif cmd == "destroy":
+                elif cmd == 'destroy':
 
-                    if input("Are you sure you want to delete the rooms? Their bookings will be as well cancelled. Enter 'yes' to confirm: ").lower() == "yes":
+                    if input("Are you sure you want to delete the rooms? Their bookings will be as well cancelled. Enter 'yes' to confirm: ").lower() == 'yes':
 
                         # No exclusive lock as even if the user is deleted or the password is changed on the fly, data integrity and consistency are still maintained, without any errors occurring.
 
@@ -1053,7 +1060,7 @@ def main():
                     else:
                         displayerror("Deletion cancelled.")
                 
-                elif cmd == "sql":
+                elif cmd == 'sql':
                     
                     try:
                         result = connection.execute(args["query"]).fetchall()
@@ -1072,7 +1079,7 @@ def main():
 
 
 ## Making sure the script can only be run as a standalone program & Global error handling ##
-if __name__ == "__main__":
+if __name__ == '__main__':
     try:
         main()
     except SystemExit:
