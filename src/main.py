@@ -258,7 +258,7 @@ def main():
         connection.commit() # Commit any previous changes to the database and avoid database lock issues
         connection.close() # Close previous connection to avoid resource usage
 
-        # Input & Authorization #
+        # Input & authorization mark #
         raw = input((('\33[91m'+currentuser+'\33[0m' if isadmin else currentuser) if currentuser is not None else "") + "> ").strip()
 
         # Re-initialize database access
