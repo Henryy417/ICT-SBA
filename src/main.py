@@ -50,7 +50,7 @@ DB_PATH = FILEDIR/"data.db"
 
 def main():
     ## Initialization ##
-    # Functional imports and mofications
+    # Functional imports
     from getpass import getpass as inputpw
     from hashlib import sha3_512 as hash
     from os import system as sysexec, name as sysname
@@ -411,21 +411,22 @@ def main():
 
         # Validate argument values and transformation by formats
         for arg in args:
-            # Convert MetaWord to its value
+            # Convert MetaWord to its value if invalid
             if isinstance(args[arg], MetaWord):
                 if 'special_words' not in commands[cmd]['args'][arg] or args[arg] not in commands[cmd]['args'][arg]['special_words']:
                     args[arg] = args[arg].value
-                    
+
+            # Validate and format argument values
             if not isinstance(args[arg], MetaWord):
                 if commands[cmd]['args'][arg]['format'] == 'csv':
                     args[arg] = args[arg].split(',')
                     if '' in args[arg]:
-                        displayerror(f"CSV argument '{arg}' cannot be empty.")
+                        displayerror(f"CSV argument '{arg}' contains at least one empty value.")
                         parse_error_loop_exit = True
                         break
                 elif commands[cmd]['args'][arg]['format'] == 'time':
                     try:
-                        args[arg] = datetime.strptime(args[arg], '%Y-%m-%d %H:%M').strftime('%Y-%m-%d %H:%M')
+                        args[arg] = datetime.strptime(args[arg], '%Y-%m-%d %H:%M').strftime('%Y-%m-%d %H:%M') # Ensure enough information is given, and the format is correct
                     except ValueError:
                         displayerror(f"Time argument '{arg}' is not a valid time input.")
                         parse_error_loop_exit = True
