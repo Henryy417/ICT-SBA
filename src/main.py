@@ -296,7 +296,7 @@ def main():
             print()
             continue
 
-        # Parse the input valid command and arguments
+        # Parse the input into valid command and named and unnamed arguments
         cmd = None
         args = {}
 
@@ -412,7 +412,7 @@ def main():
 
         # Validate argument values and transformation by formats
         for arg in args:
-            # Convert MetaWord to its value if invalid
+            # Convert MetaWord to its value literally if invalid
             if isinstance(args[arg], MetaWord):
                 if 'special_words' not in commands[cmd]['args'][arg] or args[arg] not in commands[cmd]['args'][arg]['special_words']:
                     args[arg] = args[arg].value
