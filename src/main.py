@@ -809,6 +809,12 @@ def main():
                         print()
                         continue
 
+                    # Dynamic input validity check using stored data
+                    if not isadmin and not is_valid_time_interval(current_submission_time, args["start"], allow_equal=True):
+                        displayerror("Standard user cannot set start time in the past. Please use a future time or 'now'.")
+                        print()
+                        continue
+
                     # Constructing query parameters with non-fatal dynamic input validity check using stored data
                     params = []
                     command_notice = False
