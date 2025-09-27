@@ -61,8 +61,6 @@ def main():
 
     # Functional Functions
     def update_available_commands():
-        global available_commands
-        available_commands = []
         for cmd, details in commands.items():
             if 'use_requirement' not in details or (details['use_requirement'] == 'admin' and isadmin or details['use_requirement'] == 'user' and currentuser is not None):
                 available_commands.append(cmd)
@@ -203,6 +201,7 @@ def main():
         }
     }
 
+    available_commands = []
     update_available_commands() # Initialize available_commands variable & update available commands based on current user status
 
     # Print program information
@@ -485,7 +484,7 @@ def main():
             print("Arguments of \33[3mtime\33[0m values must be in the format 'YYYY-MM-DD HH:MM'. e.g. '2008-04-17 12:00'. Additionally, 'now' can be used to refer to current time.")
             print("Arguments of \33[3mregex\33[0m values must be a valid regular expression. Matching is done from the beginning of the target text (invisible '^' has been prepended). e.g. '.' to match everything, or 'room\\d+$' to match room IDs that start with 'room' followed by one or more digits.")
             print("Arguments of \33[3mtext\33[0m values can be any text that is not empty without special formatting.")
-            print("Wildcard '*' can often be used. It usually means \33[3mall\33[0m. For some time input, it can be used to remove respective time constraints according to context. e.g. Using '*' as start time and '2008-04-17' as end time means every record until '2008-04-17'.")
+            print("Wildcard '*' can often be used. It usually means \33[3mall\33[0m. For some time inputs, it can be used to remove respective time constraints according to context. e.g. Using '*' as start time and '2008-04-17' as end time means every record until '2008-04-17'.")
 
             print() # Print a newline for better readability
 
