@@ -61,6 +61,8 @@ def main():
 
     # Functional Functions
     def update_available_commands():
+        nonlocal available_commands
+        available_commands = []
         for cmd, details in commands.items():
             if 'use_requirement' not in details or (details['use_requirement'] == 'admin' and isadmin or details['use_requirement'] == 'user' and currentuser is not None):
                 available_commands.append(cmd)
@@ -454,9 +456,9 @@ def main():
             if isinstance(value, MetaWord):
                 execution_line += f'{value.value}'
             elif isinstance(value, list):
-                execution_line += '\'' + ','.join(value) + '\''
+                execution_line += '\"' + ','.join([_.replace("\\", "\\\\").replace('"', '\\"') for _ in value]) + '\"'
             else:
-                execution_line += f'"{value}"'
+                execution_line += f'"{value.replace("\\", "\\\\").replace('"', '\\"')}"'
         displayinfo(f"Executing: {execution_line}")
 
         print() # Print a newline for better readability
