@@ -687,6 +687,10 @@ def main():
                     displayerror("Standard user cannot set start time in the past. Please use a future time or 'now'.")
                     print()
                     continue
+                if not isadmin and ((current := connection.execute("SELECT COUNT(*) FROM bookings WHERE username = ? AND in_interval(?, ?, start, end)", [currentuser, current_submission_time, datetime.max.strftime('%Y-%m-%d %H:%M')]).fetchone()[0]) + len(args["roomIDs"]) > 10):
+                    displayerror(f"Standard user cannot book more than 10 active bookings. You currently have {current} bookings. Your pending bookings will exceed the limit with a total of {current + len(args['roomIDs'])}.")
+                    print()
+                    continue
 
                 # Doing actions with non-fatal dynamic input validity check using stored data
                 result_bookings = []
@@ -791,7 +795,7 @@ def main():
 
             elif cmd == 'clear':
 
-                if (MetaWord.asterisk in (args["roomIDs"], args["usernames"], args["start"], args["end"])) or input("You are using wildcard '*' in one or more arguments. This will cancel bookings massively. Are you sure you want to proceed? Enter 'yes' to confirm: ").lower() == 'yes':
+                if (MetaWord.asterisk not in (args["roomIDs"], args["usernames"], args["start"], args["end"])) or input("You are using wildcard '*' in one or more arguments. This will cancel bookings massively. Are you sure you want to proceed? Enter 'yes' to confirm: ").lower() == 'yes':
 
                     # Meta words transformation
                     if args["start"] == MetaWord.asterisk:
