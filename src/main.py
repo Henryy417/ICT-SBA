@@ -2,6 +2,7 @@
 from pathlib import Path
 from datetime import datetime
 from os import get_terminal_size
+import sqlite3
 
 # Global program functions
 def displayerror(msg: str): # Error Message: User must solve this to receive expected results
@@ -57,7 +58,6 @@ def main():
     from re import compile as regex_compile, PatternError as RegexCompileError
     from enum import Enum
     from difflib import SequenceMatcher
-    import sqlite3
 
     # Functional Functions
     def update_available_commands():
@@ -1097,9 +1097,13 @@ if __name__ == '__main__':
         displayerror("Program terminated due to user keyboard interrupt (Ctrl+C).")
 
         # Rollback any previous changes to maintain data integrity
-        if 'connection' in globals() and connection.total_changes > 0:
-            displayerror(f"Database changes are undone.")
-            connection.rollback() # Rollback any previous changes to maintain data integrity
+        if 'connection' in globals():
+            try:
+                if connection.total_changes > 0:
+                    displayerror(f"Database changes are undone.")
+                    connection.rollback() # Rollback any previous changes to maintain data integrity
+            except sqlite3.ProgrammingError:
+                pass
         # Connection closing will be conducted automatically on exit if have.
         
         print() # Print a newline for better readability
@@ -1113,9 +1117,13 @@ if __name__ == '__main__':
             f.write(str(datetime.now())+"\n"+format_exc()+"\n\n\n")
     finally:
         # Rollback any previous changes to maintain data integrity
-        if 'connection' in globals() and connection.total_changes > 0:
-            displayerror(f"Database changes are undone.")
-            connection.rollback()
+        if 'connection' in globals():
+            try:
+                if connection.total_changes > 0:
+                    displayerror(f"Database changes are undone.")
+                    connection.rollback() # Rollback any previous changes to maintain data integrity
+            except sqlite3.ProgrammingError:
+                pass
         # Connection closing will be conducted automatically on exit if have.
 
         raise SystemExit(1) # Exit the program with a non-zero exit code to indicate an error
