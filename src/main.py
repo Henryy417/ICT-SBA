@@ -211,6 +211,7 @@ def main():
     print("Type 'help' for a list of commands.")
 
     # Initialize database and create necessary tables if they do not exist
+    global connection # Declare as global to allow access in the error handling block
     connection = sqlite3.connect(DB_PATH)
     cursor = connection.cursor()
     
@@ -221,7 +222,6 @@ def main():
             "CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, pwhash BLOB NOT NULL, isadmin BOOLEAN NOT NULL DEFAULT 0)"
         )
         cursor.execute("INSERT INTO users (username, pwhash, isadmin) VALUES (?, ?, ?)", ("admin", hash(b"admin").digest(), 1))
-        connection.commit()
 
         displayinfo("Initialization: Created 'users' table and added default admin user.")
 
@@ -231,7 +231,6 @@ def main():
        cursor.execute(
            "CREATE TABLE IF NOT EXISTS rooms (id TEXT PRIMARY KEY, description TEXT NOT NULL)"
        )
-       connection.commit()
 
        displayinfo("Initialization: Created 'rooms' table.")
 
@@ -247,7 +246,6 @@ def main():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_bookings_room_user ON bookings (roomID, username)") # Optimizing searches through both room and room & user
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_bookings_user ON bookings (username)") # Optimizing searches through user
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_bookings_time ON bookings (start)") # Optimizing searches through time
-        connection.commit()
 
         displayinfo("Initialization: Created 'bookings' table.")
 
@@ -257,7 +255,9 @@ def main():
     while True:
 
         # End database access
-        connection.commit() # Commit any previous changes to the database and avoid database lock issues
+        if connection.total_changes > 0:
+            displayinfo(f"Database updated successfully.")
+            connection.commit() # Commit any previous changes to the database and avoid database lock issues
         connection.close() # Close previous connection to avoid resource usage
 
         # Input & authorization mark #
@@ -522,7 +522,12 @@ def main():
 
         elif cmd == 'exit':
 
-            # Rollback of any uncommitted changes in the current cycle to the database and closing connection will be done automatically on exit. So YOU SHOULD NOT CHANGE THE DATABASE IN THE PARSER.
+            # End database access
+            if connection.total_changes > 0:
+                displayinfo(f"Database updated successfully.")
+                connection.commit() # Commit any previous changes to the database and avoid database lock issues
+            # Connection closing will be conducted automatically on exit.
+
             raise SystemExit(0)
 
         elif cmd == 'version':
@@ -1090,6 +1095,13 @@ if __name__ == '__main__':
         raise # Allow SystemExit to propagate normally
     except KeyboardInterrupt:
         displayerror("Program terminated due to user keyboard interrupt (Ctrl+C).")
+
+        # Rollback any previous changes to maintain data integrity
+        if 'connection' in globals() and connection.total_changes > 0:
+            displayerror(f"Database changes are undone.")
+            connection.rollback() # Rollback any previous changes to maintain data integrity
+        # Connection closing will be conducted automatically on exit if have.
+        
         print() # Print a newline for better readability
     except:
         from datetime import datetime
@@ -1100,7 +1112,12 @@ if __name__ == '__main__':
         with open(FILEDIR/"error.log", "a") as f:
             f.write(str(datetime.now())+"\n"+format_exc()+"\n\n\n")
     finally:
-        # Rollback of any uncommitted changes in the current cycle to the database and closing connection will be done automatically on exit
+        # Rollback any previous changes to maintain data integrity
+        if 'connection' in globals() and connection.total_changes > 0:
+            displayerror(f"Database changes are undone.")
+            connection.rollback()
+        # Connection closing will be conducted automatically on exit if have.
+
         raise SystemExit(1) # Exit the program with a non-zero exit code to indicate an error
 
 else:
