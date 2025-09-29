@@ -647,17 +647,10 @@ def main():
             elif cmd == 'show':
 
                 # Fetching results with non-fatal dynamic input validity check using stored data
-                if '*' not in args["bookingIDs"]:
+                if args["bookingIDs"] != MetaWord.asterisk:
                     result_bookings = connection.execute("SELECT * FROM bookings WHERE id IN (" + ','.join('?' for _ in args["bookingIDs"]) + ")", args["bookingIDs"]).fetchall()
                 else:
-                    result_bookings = []
-                    for booking_id in args["bookingIDs"]:
-                        booking = connection.execute("SELECT * FROM bookings WHERE id=?", [booking_id]).fetchone()
-                        if booking is None:
-                            displaywarning(f"Booking ID '{booking_id}' does not exist and is skipped.")
-                            command_notice = True
-                            continue
-                        result_bookings.append(booking)
+                    result_bookings = connection.execute("SELECT * FROM bookings").fetchall()
 
                 print() if command_notice else None # Print a newline if there was a in-command notice
 
