@@ -212,40 +212,41 @@ def main():
 
     # Initialize database and create necessary tables if they do not exist
     connection = sqlite3.connect(DB_PATH)
+    cursor = connection.cursor()
     
-    if connection.execute("SELECT type FROM sqlite_master WHERE type='table' AND name='users'").fetchone() is None:
+    if cursor.execute("SELECT type FROM sqlite_master WHERE type='table' AND name='users'").fetchone() is None:
 
         # Create users table with prevention of external between-command transaction
-        connection.execute(
+        cursor.execute(
             "CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, pwhash BLOB NOT NULL, isadmin BOOLEAN NOT NULL DEFAULT 0)"
         )
-        connection.execute("INSERT INTO users (username, pwhash, isadmin) VALUES (?, ?, ?)", ("admin", hash(b"admin").digest(), 1))
+        cursor.execute("INSERT INTO users (username, pwhash, isadmin) VALUES (?, ?, ?)", ("admin", hash(b"admin").digest(), 1))
         connection.commit()
 
         displayinfo("Initialization: Created 'users' table and added default admin user.")
 
-    if connection.execute("SELECT type FROM sqlite_master WHERE type='table' AND name='rooms'").fetchone() is None:
+    if cursor.execute("SELECT type FROM sqlite_master WHERE type='table' AND name='rooms'").fetchone() is None:
 
        # Create rooms table with prevention of external between-command transaction
-       connection.execute(
+       cursor.execute(
            "CREATE TABLE IF NOT EXISTS rooms (id TEXT PRIMARY KEY, description TEXT NOT NULL)"
        )
        connection.commit()
 
        displayinfo("Initialization: Created 'rooms' table.")
 
-    if connection.execute("SELECT type FROM sqlite_master WHERE type='table' AND name='bookings'").fetchone() is None:
+    if cursor.execute("SELECT type FROM sqlite_master WHERE type='table' AND name='bookings'").fetchone() is None:
 
         # Create bookings table with prevention of external between-command transaction
         # Note: Modification to the bookings table should, at all times, be done with foreign key constraints enabled to maintain data consistency and integrity.
-        connection.execute(
+        cursor.execute(
             "CREATE TABLE IF NOT EXISTS bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, roomID TEXT, username TEXT, start TEXT NOT NULL, end TEXT NOT NULL, usage TEXT NOT NULL, FOREIGN KEY (username) REFERENCES users(username), FOREIGN KEY (roomID) REFERENCES rooms(id))"
         )
 
         # Create indexes for bookings table to improve performance
-        connection.execute("CREATE INDEX IF NOT EXISTS idx_bookings_room_user ON bookings (roomID, username)") # Optimizing searches through both room and room & user
-        connection.execute("CREATE INDEX IF NOT EXISTS idx_bookings_user ON bookings (username)") # Optimizing searches through user
-        connection.execute("CREATE INDEX IF NOT EXISTS idx_bookings_time ON bookings (start)") # Optimizing searches through time
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_bookings_room_user ON bookings (roomID, username)") # Optimizing searches through both room and room & user
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_bookings_user ON bookings (username)") # Optimizing searches through user
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_bookings_time ON bookings (start)") # Optimizing searches through time
         connection.commit()
 
         displayinfo("Initialization: Created 'bookings' table.")
@@ -264,11 +265,12 @@ def main():
 
         # Re-initialize database access
         connection = sqlite3.connect(DB_PATH) # Initialize database connection for command execution
-        connection.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
+        cursor = connection.cursor()
+        cursor.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints (no need to commit)
 
         # Check if user still exists if logged in
         if currentuser is not None:
-            result_isadmin = connection.execute("SELECT isadmin FROM users WHERE username = ?", [currentuser]).fetchone()
+            result_isadmin = cursor.execute("SELECT isadmin FROM users WHERE username = ?", [currentuser]).fetchone()
             if result_isadmin is None:
                 currentuser = None
                 isadmin = False
@@ -520,10 +522,7 @@ def main():
 
         elif cmd == 'exit':
 
-            # End database access
-            connection.commit() # Commit any previous changes to the database and avoid database lock issues
-            connection.close() # Close previous connection to avoid resource usage
-
+            # Rollback of any uncommitted changes in the current cycle to the database and closing connection will be done automatically on exit. So YOU SHOULD NOT CHANGE THE DATABASE IN THE PARSER.
             raise SystemExit(0)
 
         elif cmd == 'version':
@@ -550,7 +549,7 @@ def main():
 
             pwhash = hash(inputpw("Password: ").encode()).digest()
 
-            result_user = connection.execute("SELECT isadmin FROM users WHERE username=? AND pwhash=?", (args["username"], pwhash)).fetchone()
+            result_user = cursor.execute("SELECT isadmin FROM users WHERE username=? AND pwhash=?", (args["username"], pwhash)).fetchone()
 
             if result_user is not None:
                 currentuser = args["username"]
@@ -567,7 +566,7 @@ def main():
                 if (new_password := inputpw("New Password: ")) == inputpw("Confirm New Password: "):
                     new_pwhash = hash(new_password.encode()).digest()
 
-                    connection.execute("UPDATE users SET pwhash=? WHERE username=?", (new_pwhash, currentuser))
+                    cursor.execute("UPDATE users SET pwhash=? WHERE username=?", (new_pwhash, currentuser))
 
                     displaysuccess("Password changed successfully.")
                 else:
@@ -575,7 +574,7 @@ def main():
 
             elif cmd == 'rooms':
 
-                result_rooms = connection.execute("SELECT id, description FROM rooms ORDER BY id").fetchall()
+                result_rooms = cursor.execute("SELECT id, description FROM rooms ORDER BY id").fetchall()
 
                 if result_rooms:
                     displaysuccess("Rooms found:")
@@ -609,7 +608,7 @@ def main():
                 params = []
                 command_notice = False
                 if args["roomIDs"] != MetaWord.asterisk:
-                    actual_room_ids = [room for room in args["roomIDs"] if connection.execute("SELECT 0 FROM rooms WHERE id=?", [room]).fetchone() is not None or (command_notice := True) and displaywarning(f"Room '{room}' does not exist and is skipped.")]
+                    actual_room_ids = [room for room in args["roomIDs"] if cursor.execute("SELECT 0 FROM rooms WHERE id=?", [room]).fetchone() is not None or (command_notice := True) and displaywarning(f"Room '{room}' does not exist and is skipped.")]
                     params.extend(actual_room_ids)
                 else:
                     actual_room_ids = MetaWord.asterisk
@@ -617,7 +616,7 @@ def main():
                     if args["usernames"] == MetaWord.me:
                         actual_user_ids = [currentuser]
                     else:
-                        actual_user_ids = [user for user in args["usernames"] if connection.execute("SELECT 0 FROM users WHERE username=?", [user]).fetchone() is not None or (command_notice := True) and displaywarning(f"User '{user}' does not exist and is skipped.")]
+                        actual_user_ids = [user for user in args["usernames"] if cursor.execute("SELECT 0 FROM users WHERE username=?", [user]).fetchone() is not None or (command_notice := True) and displaywarning(f"User '{user}' does not exist and is skipped.")]
                     params.extend(actual_user_ids)
                 else:
                     actual_user_ids = MetaWord.asterisk
@@ -632,7 +631,7 @@ def main():
 
                 query = f"SELECT * FROM bookings WHERE {'roomID IN (' + ','.join('?' for _ in actual_room_ids) + ')' if actual_room_ids != MetaWord.asterisk else "TRUE"} AND {'username IN ('+','.join('?' for _ in actual_user_ids)+')' if actual_user_ids != MetaWord.asterisk else "TRUE"} AND in_interval(?, ?, start, end) AND regex(?, usage) ORDER BY start, roomID"
 
-                result_bookings = connection.execute(query, params).fetchall()
+                result_bookings = cursor.execute(query, params).fetchall()
 
                 if result_bookings:
                     displaysuccess("Bookings found:")
@@ -648,9 +647,9 @@ def main():
 
                 # Fetching results with non-fatal dynamic input validity check using stored data
                 if args["bookingIDs"] != MetaWord.asterisk:
-                    result_bookings = connection.execute("SELECT * FROM bookings WHERE id IN (" + ','.join('?' for _ in args["bookingIDs"]) + ")", args["bookingIDs"]).fetchall()
+                    result_bookings = cursor.execute("SELECT * FROM bookings WHERE id IN (" + ','.join('?' for _ in args["bookingIDs"]) + ")", args["bookingIDs"]).fetchall()
                 else:
-                    result_bookings = connection.execute("SELECT * FROM bookings").fetchall()
+                    result_bookings = cursor.execute("SELECT * FROM bookings").fetchall()
 
                 print() if command_notice else None # Print a newline if there was a in-command notice
 
@@ -666,7 +665,7 @@ def main():
 
             elif cmd == 'book':
                 
-                connection.execute("BEGIN EXCLUSIVE") # Start an exclusive transaction to prevent other users from modifying the database after validative searching
+                cursor.execute("BEGIN EXCLUSIVE") # Start an exclusive transaction to prevent other users from modifying the database after validative searching
                 connection.create_function("in_interval", 4, sql_is_in_time_interval)
 
                 # Input consistency checks
@@ -680,7 +679,7 @@ def main():
                     displayerror("Standard user cannot set start time in the past. Please use a future time or 'now'.")
                     print()
                     continue
-                if not isadmin and ((current := connection.execute("SELECT COUNT(*) FROM bookings WHERE username = ? AND in_interval(?, ?, start, end)", [currentuser, current_submission_time, datetime.max.strftime('%Y-%m-%d %H:%M')]).fetchone()[0]) + len(args["roomIDs"]) > 10):
+                if not isadmin and ((current := cursor.execute("SELECT COUNT(*) FROM bookings WHERE username = ? AND in_interval(?, ?, start, end)", [currentuser, current_submission_time, datetime.max.strftime('%Y-%m-%d %H:%M')]).fetchone()[0]) + len(args["roomIDs"]) > 10):
                     displayerror(f"Standard user cannot book more than 10 active bookings. You currently have {current} bookings. Your pending bookings will exceed the limit with a total of {current + len(args['roomIDs'])}.")
                     print()
                     continue
@@ -688,18 +687,18 @@ def main():
                 # Doing actions with non-fatal dynamic input validity check using stored data
                 result_bookings = []
                 for room_id in args["roomIDs"]:
-                    if connection.execute("SELECT 0 FROM rooms WHERE id=?", [room_id]).fetchone() is None:
+                    if cursor.execute("SELECT 0 FROM rooms WHERE id=?", [room_id]).fetchone() is None:
                         displaywarning(f"Room '{room_id}' does not exist and is skipped.")
                         command_notice = True
                         continue
-                    if (result_bookedbooking := connection.execute(f"SELECT id FROM bookings WHERE roomID = ? AND in_interval(?, ?, start, end)", (room_id, args["start"], args["end"])).fetchone()) is not None:
+                    if (result_bookedbooking := cursor.execute(f"SELECT id FROM bookings WHERE roomID = ? AND in_interval(?, ?, start, end)", (room_id, args["start"], args["end"])).fetchone()) is not None:
                         displaywarning(f"Time slot is occupied (Booking ID: {result_bookedbooking[0]}) for room {room_id} and is skipped.")
                         command_notice = True
                         continue
 
-                    connection.execute("INSERT INTO bookings (roomID, username, start, end, usage) VALUES (?, ?, ?, ?, ?)", (room_id, currentuser, args["start"], args["end"], args["usage"]))
+                    cursor.execute("INSERT INTO bookings (roomID, username, start, end, usage) VALUES (?, ?, ?, ?, ?)", (room_id, currentuser, args["start"], args["end"], args["usage"]))
                     connection.commit() # Commit the addition to the database before fetching the booking record
-                    result_bookings.append(connection.execute("SELECT * FROM bookings WHERE ID = (SELECT seq FROM sqlite_sequence WHERE name = 'bookings')").fetchone()) # Fetch the newly added booking
+                    result_bookings.append(cursor.execute("SELECT * FROM bookings WHERE ID = ?", [cursor.lastrowid]).fetchone()) # Fetch the newly added booking
 
                 print() if command_notice else None # Print a newline if there was a in-command notice
 
@@ -720,7 +719,7 @@ def main():
                 # Doing actions with non-fatal dynamic input validity check using stored data
                 result_bookings = []
                 for booking_id in args["bookingIDs"]:
-                    result_booking = connection.execute("SELECT username, start FROM bookings WHERE id=?", [booking_id]).fetchone()
+                    result_booking = cursor.execute("SELECT username, start FROM bookings WHERE id=?", [booking_id]).fetchone()
                     if result_booking is None:
                         displaywarning(f"Booking ID '{booking_id}' does not exist and is skipped.")
                         command_notice = True
@@ -734,9 +733,9 @@ def main():
                         command_notice = True
                         continue
 
-                    connection.execute("UPDATE bookings SET usage=? WHERE id=?", (args["usage"], booking_id))
+                    cursor.execute("UPDATE bookings SET usage=? WHERE id=?", (args["usage"], booking_id))
                     connection.commit() # Commit the modification to the database before fetching the booking record
-                    result_bookings.append(connection.execute("SELECT * FROM bookings WHERE id=?", [booking_id]).fetchone()) # Fetch the modified booking
+                    result_bookings.append(cursor.execute("SELECT * FROM bookings WHERE id=?", [booking_id]).fetchone()) # Fetch the modified booking
 
                 print() if command_notice else None # Print a newline if there was a in-command notice
 
@@ -757,7 +756,7 @@ def main():
                 # Doing actions with non-fatal dynamic input validity check using stored data
                 result_bookings = []
                 for booking_id in args["bookingIDs"]:
-                    result_booking = connection.execute("SELECT username, start FROM bookings WHERE id=?", [booking_id]).fetchone()
+                    result_booking = cursor.execute("SELECT username, start FROM bookings WHERE id=?", [booking_id]).fetchone()
                     if result_booking is None:
                         displaywarning(f"Booking ID '{booking_id}' does not exist and is skipped.")
                         command_notice = True
@@ -771,8 +770,8 @@ def main():
                         command_notice = True
                         continue
 
-                    result_bookings.append(connection.execute("SELECT * FROM bookings WHERE id=?", [booking_id]).fetchone()) # Fetch the booking before deletion
-                    connection.execute("DELETE FROM bookings WHERE id=?", [booking_id])
+                    result_bookings.append(cursor.execute("SELECT * FROM bookings WHERE id=?", [booking_id]).fetchone()) # Fetch the booking before deletion
+                    cursor.execute("DELETE FROM bookings WHERE id=?", [booking_id])
 
                 print() if command_notice else None # Print a newline if there was a in-command notice
 
@@ -816,7 +815,7 @@ def main():
                     params = []
                     command_notice = False
                     if args["roomIDs"] != MetaWord.asterisk:
-                        actual_room_ids = [room for room in args["roomIDs"] if connection.execute("SELECT 0 FROM rooms WHERE id=?", [room]).fetchone() is not None or (command_notice := True) and displaywarning(f"Room '{room}' does not exist and is skipped.")]
+                        actual_room_ids = [room for room in args["roomIDs"] if cursor.execute("SELECT 0 FROM rooms WHERE id=?", [room]).fetchone() is not None or (command_notice := True) and displaywarning(f"Room '{room}' does not exist and is skipped.")]
                         params.extend(actual_room_ids)
                     else:
                         actual_room_ids = MetaWord.asterisk
@@ -824,7 +823,7 @@ def main():
                         if args["usernames"] == MetaWord.me:
                             actual_usernames = [currentuser]
                         else:
-                            actual_usernames = [user for user in args["usernames"] if connection.execute("SELECT 0 FROM users WHERE username=?", [user]).fetchone() is not None or (command_notice := True) and displaywarning(f"User '{user}' does not exist and is skipped.")]
+                            actual_usernames = [user for user in args["usernames"] if cursor.execute("SELECT 0 FROM users WHERE username=?", [user]).fetchone() is not None or (command_notice := True) and displaywarning(f"User '{user}' does not exist and is skipped.")]
                         params.extend(actual_usernames)
                     else:
                         actual_usernames = MetaWord.asterisk
@@ -839,7 +838,7 @@ def main():
 
                     query = f"SELECT * FROM bookings WHERE {'roomID IN ('+','.join('?' for _ in actual_room_ids)+')' if actual_room_ids != MetaWord.asterisk else 'TRUE'} AND {'username IN ('+','.join('?' for _ in actual_usernames)+')' if actual_usernames != MetaWord.asterisk else 'TRUE'} AND in_interval(?, ?, start, end) AND regex(?, usage)"
 
-                    bookings = connection.execute(query, params).fetchall()
+                    bookings = cursor.execute(query, params).fetchall()
 
                     # Doing actions with non-fatal dynamic input validity check using stored data
                     result_bookings = []
@@ -850,7 +849,7 @@ def main():
                             continue
                         result_bookings.append(booking)
 
-                        connection.execute("DELETE FROM bookings WHERE id=?", [booking[0]])
+                        cursor.execute("DELETE FROM bookings WHERE id=?", [booking[0]])
 
                     print() if command_notice else None # Print a newline if there was a in-command notice
 
@@ -875,8 +874,8 @@ def main():
 
                     # Querying with non-fatal dynamic input validity check using stored data
                     admin_status = 0
-                    if connection.execute("SELECT username FROM users WHERE username=?", [args["username"]]).fetchone() is not None:
-                        admin_status = connection.execute("SELECT isadmin FROM users WHERE username=?", [args["username"]]).fetchone()[0]
+                    if cursor.execute("SELECT username FROM users WHERE username=?", [args["username"]]).fetchone() is not None:
+                        admin_status = cursor.execute("SELECT isadmin FROM users WHERE username=?", [args["username"]]).fetchone()[0]
                         displayinfo(f"User '{args['username']}' already exists. Changing password.")
                         command_notice = True
 
@@ -884,7 +883,7 @@ def main():
 
                     pwhash = hash(inputpw("Password: ").encode()).digest()
                     
-                    connection.execute("INSERT OR REPLACE INTO users (username, pwhash, isadmin) VALUES (?, ?, ?)", (args["username"], pwhash, admin_status)) # Insert or update the user
+                    cursor.execute("INSERT OR REPLACE INTO users (username, pwhash, isadmin) VALUES (?, ?, ?)", (args["username"], pwhash, admin_status)) # Insert or update the user
                     displaysuccess(f"User '{args['username']}' registered or updated successfully.")
 
                 elif cmd == 'dereg':
@@ -897,7 +896,7 @@ def main():
                         result_usernames = []
                         result_bookings = []
                         for username in args["usernames"]:
-                            if connection.execute("SELECT username FROM users WHERE username=?", [username]).fetchone() is None:
+                            if cursor.execute("SELECT username FROM users WHERE username=?", [username]).fetchone() is None:
                                 displaywarning(f"User '{username}' does not exist and is skipped.")
                                 command_notice = True
                                 continue
@@ -907,9 +906,9 @@ def main():
                                 continue
 
                             result_usernames.append([username])
-                            result_bookings.extend(connection.execute("SELECT * FROM bookings WHERE username=?", [username]).fetchall()) # Fetch the bookings before deletion
-                            connection.execute("DELETE FROM bookings WHERE username=?", [username])
-                            connection.execute("DELETE FROM users WHERE username=?", [username])
+                            result_bookings.extend(cursor.execute("SELECT * FROM bookings WHERE username=?", [username]).fetchall()) # Fetch the bookings before deletion
+                            cursor.execute("DELETE FROM bookings WHERE username=?", [username])
+                            cursor.execute("DELETE FROM users WHERE username=?", [username])
 
                         print() if command_notice else None # Print a newline if there was a in-command notice
 
@@ -941,13 +940,13 @@ def main():
                     # Doing actions with non-fatal dynamic input validity check using stored data
                     result_usernames = []
                     for username in args["usernames"]:
-                        if connection.execute("SELECT username FROM users WHERE username=?", [username]).fetchone() is None:
+                        if cursor.execute("SELECT username FROM users WHERE username=?", [username]).fetchone() is None:
                             displaywarning(f"User '{username}' does not exist and is skipped.")
                             command_notice = True
                             continue
 
                         result_usernames.append([username])
-                        connection.execute("UPDATE users SET isadmin = 1 WHERE username=?", [username])
+                        cursor.execute("UPDATE users SET isadmin = 1 WHERE username=?", [username])
 
                     print() if command_notice else None # Print a newline if there was a in-command notice
 
@@ -968,7 +967,7 @@ def main():
                     # Doing actions with non-fatal dynamic input validity check using stored data
                     result_usernames = []
                     for username in args["usernames"]:
-                        if connection.execute("SELECT username FROM users WHERE username=?", [username]).fetchone() is None:
+                        if cursor.execute("SELECT username FROM users WHERE username=?", [username]).fetchone() is None:
                             displaywarning(f"User '{username}' does not exist and is skipped.")
                             command_notice = True
                             continue
@@ -978,7 +977,7 @@ def main():
                             continue
 
                         result_usernames.append([username])
-                        connection.execute("UPDATE users SET isadmin = 0 WHERE username=?", [username])
+                        cursor.execute("UPDATE users SET isadmin = 0 WHERE username=?", [username])
 
                     print() if command_notice else None # Print a newline if there was a in-command notice
 
@@ -994,7 +993,7 @@ def main():
 
                 elif cmd == 'users':
 
-                    result_users = connection.execute("SELECT * FROM users ORDER BY username").fetchall()
+                    result_users = cursor.execute("SELECT * FROM users ORDER BY username").fetchall()
 
                     if result_users:
                         displaysuccess("Users found:")
@@ -1013,12 +1012,12 @@ def main():
                     # Doing actions with non-fatal dynamic input validity check using stored data
                     result_room_ids = []
                     for room_id in args["roomIDs"]:
-                        if connection.execute("SELECT id FROM rooms WHERE id=?", [room_id]).fetchone() is not None:
+                        if cursor.execute("SELECT id FROM rooms WHERE id=?", [room_id]).fetchone() is not None:
                             displayinfo(f"Room '{room_id}' already exists, changing description.")
                             command_notice = True
 
                         result_room_ids.append([room_id])
-                        connection.execute("INSERT OR REPLACE INTO rooms (id, description) VALUES (?, ?)", [room_id, args["description"]])
+                        cursor.execute("INSERT OR REPLACE INTO rooms (id, description) VALUES (?, ?)", [room_id, args["description"]])
 
                     print() if command_notice else None # Print a newline if there was a in-command notice
 
@@ -1041,14 +1040,14 @@ def main():
                         # Doing actions with non-fatal dynamic input validity check using stored data
                         result_room_ids = []
                         for room_id in args["roomIDs"]:
-                            if connection.execute("SELECT id FROM rooms WHERE id=?", [room_id]).fetchone() is None:
+                            if cursor.execute("SELECT id FROM rooms WHERE id=?", [room_id]).fetchone() is None:
                                 displaywarning(f"Room '{room_id}' does not exist and is skipped.")
                                 command_notice = True
                                 continue
 
                             result_room_ids.append([room_id])
-                            connection.execute("DELETE FROM bookings WHERE roomID=?", [room_id])
-                            connection.execute("DELETE FROM rooms WHERE id=?", [room_id])
+                            cursor.execute("DELETE FROM bookings WHERE roomID=?", [room_id])
+                            cursor.execute("DELETE FROM rooms WHERE id=?", [room_id])
 
                         print() if command_notice else None # Print a newline if there was a in-command notice
 
@@ -1068,7 +1067,7 @@ def main():
                 elif cmd == 'sql':
                     
                     try:
-                        result = connection.execute(args["query"]).fetchall()
+                        result = cursor.execute(args["query"]).fetchall()
                     except sqlite3.Error as e:
                         displayerror(f"Error executing SQL query:\n{e}")
                     else:
@@ -1101,7 +1100,7 @@ if __name__ == '__main__':
         with open(FILEDIR/"error.log", "a") as f:
             f.write(str(datetime.now())+"\n"+format_exc()+"\n\n\n")
     finally:
-        # Rollback of any uncommitted changes in the current cycle to the database will be done automatically on exit
+        # Rollback of any uncommitted changes in the current cycle to the database and closing connection will be done automatically on exit
         raise SystemExit(1) # Exit the program with a non-zero exit code to indicate an error
 
 else:
