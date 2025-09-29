@@ -1098,6 +1098,7 @@ if __name__ == '__main__':
 
         # Rollback any previous changes to maintain data integrity
         if 'connection' in globals():
+            # Check if the connection is still open
             try:
                 if connection.total_changes > 0:
                     displayerror(f"Database changes are undone.")
@@ -1118,6 +1119,7 @@ if __name__ == '__main__':
     finally:
         # Rollback any previous changes to maintain data integrity
         if 'connection' in globals():
+            # Check if the connection is still open
             try:
                 if connection.total_changes > 0:
                     displayerror(f"Database changes are undone.")
