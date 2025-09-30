@@ -552,7 +552,7 @@ def main():
 
         elif cmd == 'login':
 
-            pwhash = hash(inputpw("Password: ").encode()+args["username"].encode()).digest()
+            pwhash = hash((inputpw("Password: ") + args["username"]).encode()).digest()
 
             result_user = cursor.execute("SELECT isadmin FROM users WHERE username=? AND pwhash=?", (args["username"], pwhash)).fetchone()
 
@@ -569,7 +569,7 @@ def main():
             if cmd == 'cp':
 
                 if (new_password := inputpw("New Password: ")) == inputpw("Confirm New Password: "):
-                    new_pwhash = hash(new_password.encode()+currentuser.encode()).digest()
+                    new_pwhash = hash((new_password + currentuser).encode()).digest()
 
                     cursor.execute("UPDATE users SET pwhash=? WHERE username=?", (new_pwhash, currentuser))
 
@@ -886,7 +886,7 @@ def main():
 
                     print() if command_notice else None # Print a newline if there was a in-command notice
 
-                    pwhash = hash(inputpw("Password: ").encode()+args["username"].encode()).digest()
+                    pwhash = hash((inputpw("Password: ") + args["username"]).encode()).digest()
                     
                     cursor.execute("INSERT OR REPLACE INTO users (username, pwhash, isadmin) VALUES (?, ?, ?)", (args["username"], pwhash, admin_status)) # Insert or update the user
                     displaysuccess(f"User '{args['username']}' registered or updated successfully.")
