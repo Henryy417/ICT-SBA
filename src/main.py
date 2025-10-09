@@ -55,7 +55,7 @@ def main():
     from getpass import getpass as inputpw
     from hashlib import sha3_512 as hash
     from os import system as sysexec, name as sysname
-    from re import compile as regex_compile, PatternError as RegexCompileError
+    from re import compile as regex_compile, error as RegexCompileError
     from enum import Enum
     from difflib import SequenceMatcher
 
