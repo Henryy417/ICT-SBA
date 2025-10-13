@@ -650,7 +650,6 @@ def main():
 
             elif cmd == 'show':
 
-                # Fetching results with non-fatal dynamic input validity check using stored data
                 if args["bookingIDs"] != MetaWord.asterisk:
                     result_bookings = cursor.execute("SELECT * FROM bookings WHERE id IN (" + ','.join('?' for _ in args["bookingIDs"]) + ")", args["bookingIDs"]).fetchall()
                 else:
