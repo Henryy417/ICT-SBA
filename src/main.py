@@ -1,3 +1,7 @@
+# TODO
+# - get string display width CLI using wcwidth module
+# - remove time format, intelligently read time input with multiple timeslots and different formats
+
 # Global imports
 from pathlib import Path
 from datetime import datetime
