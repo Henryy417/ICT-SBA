@@ -684,7 +684,7 @@ def main():
                     print()
                     continue
                 if not isadmin and ((current := cursor.execute("SELECT COUNT(*) FROM bookings WHERE username = ? AND in_interval(?, ?, start, end)", [currentuser, current_submission_time, datetime.max.strftime('%Y-%m-%d %H:%M')]).fetchone()[0]) + len(args["roomIDs"]) > 10):
-                    displayerror(f"Standard user cannot book more than 10 active bookings. You currently have {current} bookings. Your pending bookings will exceed the limit with a total of {current + len(args['roomIDs'])}.")
+                    displayerror(f"Standard user cannot have more than 10 active bookings. You currently have {current} bookings. Your pending bookings will exceed the limit with a total of {current + len(args['roomIDs'])}.")
                     print()
                     continue
 
