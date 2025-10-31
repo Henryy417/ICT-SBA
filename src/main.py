@@ -1,12 +1,11 @@
 # TODO
-# - get string display width CLI using wcwidth module
 # - remove time format, intelligently read time input with multiple timeslots and different formats
 
 # Global imports
+from os import get_terminal_size
+from wcwidth import wcswidth
 from pathlib import Path
 from datetime import datetime
-from os import get_terminal_size
-from re import findall as regex_findall, compile as regex_compile, error as RegexCompileError
 import sqlite3
 
 # Global program functions
@@ -40,7 +39,7 @@ def display_table(headers: list[str], widths: list[int], *rows: list[list[str]])
 
     line_buffer = ""
     for header, width in zip(headers, adjusted_widths):
-        line_buffer += '|' + header.ljust(width - len(regex_findall('[\u4e00-\u9fff]', header)))
+        line_buffer += '|' + header.ljust(width - (wcswidth(header) - len(header)))
     print(line_buffer + '|')
 
     line_buffer = ""
@@ -51,7 +50,7 @@ def display_table(headers: list[str], widths: list[int], *rows: list[list[str]])
     for row in rows:
         line_buffer = ""
         for item, width in zip(row, adjusted_widths):
-            line_buffer += '|' + str(item).ljust(width - len(regex_findall('[\u4e00-\u9fff]', str(item))))
+            line_buffer += '|' + item.ljust(width - (wcswidth(item) - len(item)))
         print(line_buffer + '|')
 
 # Program information
@@ -67,6 +66,7 @@ def main():
     from getpass import getpass as inputpw
     from hashlib import sha3_512 as hash
     from os import system as sysexec, name as sysname
+    from re import compile as regex_compile, error as RegexCompileError
     from enum import Enum
     from difflib import SequenceMatcher
 
