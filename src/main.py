@@ -55,7 +55,7 @@ def display_table(headers: list[str], widths: list[int], *rows: list[list[str]])
         print(line_buffer + '|')
 
 # Program information
-INFO = "Booker v2.0"
+INFO = "Booker v2.1"
 FILEDIR = Path(__file__).resolve().parent
 
 # Customizable program information
