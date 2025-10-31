@@ -78,7 +78,7 @@ def main():
             if 'use_requirement' not in details or (details['use_requirement'] == 'admin' and isadmin or details['use_requirement'] == 'user' and currentuser is not None):
                 available_commands.append(cmd)
 
-    def is_valid_time_interval(start: str, end: str, allow_equal: bool = False) -> bool: # Does not check if the times themselves are valid, errors may be raised
+    def is_valid_time_interval(start: str, end: str, allow_equal: bool = False) -> bool: # Expects to receive valid time strings
         start_dt = datetime.strptime(start, '%Y-%m-%d %H:%M')
         end_dt = datetime.strptime(end, '%Y-%m-%d %H:%M')
         if allow_equal:
@@ -87,14 +87,18 @@ def main():
             return start_dt < end_dt
 
     # Functional Functions for SQL
-    def sql_is_in_time_interval(interval_start: str, interval_end: str, target_start: str, target_end: str) -> bool: # Does not check if the intervals themselves are valid, UNEXPECTED RESULTS MAY BE RETURNED, errors may be raised
+    def sql_is_in_time_interval(interval_start: str, interval_end: str, target_start: str, target_end: str) -> bool: # Expects intervals to be valid (valid time strings and consistent timeslots)
+        # Developer-friendly error raising
+        if not is_valid_time_interval(interval_start, interval_end) or not is_valid_time_interval(target_start, target_end):
+            raise ValueError("Time interval(s) provided to sql_is_in_time_interval is/are not consistent.")
+        
         interval_start_dt = datetime.strptime(interval_start, '%Y-%m-%d %H:%M')
         interval_end_dt = datetime.strptime(interval_end, '%Y-%m-%d %H:%M')
         target_start_dt = datetime.strptime(target_start, '%Y-%m-%d %H:%M')
         target_end_dt = datetime.strptime(target_end, '%Y-%m-%d %H:%M')
         return not(interval_start_dt >= target_end_dt or interval_end_dt <= target_start_dt)
 
-    def sql_regex_match(pattern: str, value: str) -> bool:
+    def sql_regex_match(pattern: str, value: str) -> bool: # Expects pattern to be a valid regex pattern
         return regex_compile(pattern).match(value) is not None
 
     # Placeholder for user authentication
