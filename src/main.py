@@ -484,9 +484,9 @@ def main():
         for argname, value in args.items():
             execution_line += f' --{argname} '
             if isinstance(value, MetaWord):
-                execution_line += f'{value.value}'
+                execution_line += value.value
             elif isinstance(value, list):
-                execution_line += '\"' + ','.join([_.replace("\\", "\\\\").replace('"', '\\"') for _ in value]) + '\"'
+                execution_line += f'"{','.join([_.replace("\\", "\\\\").replace('"', '\\"') for _ in value])}"'
             else:
                 execution_line += f'"{value.replace("\\", "\\\\").replace('"', '\\"')}"'
         displayinfo(f"Executing: {execution_line}")
