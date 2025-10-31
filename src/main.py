@@ -6,6 +6,7 @@
 from pathlib import Path
 from datetime import datetime
 from os import get_terminal_size
+from re import findall as regex_findall, compile as regex_compile, error as RegexCompileError
 import sqlite3
 
 # Global program functions
@@ -21,7 +22,14 @@ def displaywarning(msg: str): # Warning Message: User may want to solve this to 
 def displayinfo(msg: str): # Information Message: User may want to know this but nothing is wrong nor actions needed
     print(f"\33[94m{msg}\33[0m")
 
-def display_table(headers: list[str], widths: list[int], *rows: list):
+def display_table(headers: list[str], widths: list[int], *rows: list[list[str]]):
+    # Developer-friendly error raising
+    if len(headers) != len(widths) or any(len(row) != len(headers) for row in rows):
+        raise ValueError("Number of headers, widths, and row items must match.")
+    for width in widths:
+        if width <= 0:
+            raise ValueError("Column widths must be positive integers.")
+        
     adjusted_widths = []
     terminal_width = get_terminal_size().columns - len(headers) - 1
     if terminal_width < (totalwidth := sum(widths)):
@@ -32,7 +40,7 @@ def display_table(headers: list[str], widths: list[int], *rows: list):
 
     line_buffer = ""
     for header, width in zip(headers, adjusted_widths):
-        line_buffer += '|' + header.ljust(width)
+        line_buffer += '|' + header.ljust(width - len(regex_findall('[\u4e00-\u9fff]', header)))
     print(line_buffer + '|')
 
     line_buffer = ""
@@ -43,7 +51,7 @@ def display_table(headers: list[str], widths: list[int], *rows: list):
     for row in rows:
         line_buffer = ""
         for item, width in zip(row, adjusted_widths):
-            line_buffer += '|' + str(item).ljust(width)
+            line_buffer += '|' + str(item).ljust(width - len(regex_findall('[\u4e00-\u9fff]', str(item))))
         print(line_buffer + '|')
 
 # Program information
@@ -59,7 +67,6 @@ def main():
     from getpass import getpass as inputpw
     from hashlib import sha3_512 as hash
     from os import system as sysexec, name as sysname
-    from re import compile as regex_compile, error as RegexCompileError
     from enum import Enum
     from difflib import SequenceMatcher
 
@@ -71,7 +78,7 @@ def main():
             if 'use_requirement' not in details or (details['use_requirement'] == 'admin' and isadmin or details['use_requirement'] == 'user' and currentuser is not None):
                 available_commands.append(cmd)
 
-    def is_valid_time_interval(start: str, end: str, allow_equal: bool = False) -> bool:
+    def is_valid_time_interval(start: str, end: str, allow_equal: bool = False) -> bool: # Does not check if the times themselves are valid, errors may be raised
         start_dt = datetime.strptime(start, '%Y-%m-%d %H:%M')
         end_dt = datetime.strptime(end, '%Y-%m-%d %H:%M')
         if allow_equal:
@@ -80,14 +87,14 @@ def main():
             return start_dt < end_dt
 
     # Functional Functions for SQL
-    def sql_is_in_time_interval(interval_start: str, interval_end: str, target_start: str, target_end: str) -> bool:
+    def sql_is_in_time_interval(interval_start: str, interval_end: str, target_start: str, target_end: str) -> bool: # Does not check if the intervals themselves are valid, UNEXPECTED RESULTS MAY BE RETURNED, errors may be raised
         interval_start_dt = datetime.strptime(interval_start, '%Y-%m-%d %H:%M')
         interval_end_dt = datetime.strptime(interval_end, '%Y-%m-%d %H:%M')
         target_start_dt = datetime.strptime(target_start, '%Y-%m-%d %H:%M')
         target_end_dt = datetime.strptime(target_end, '%Y-%m-%d %H:%M')
         return not(interval_start_dt >= target_end_dt or interval_end_dt <= target_start_dt)
 
-    def sql_regex_match(pattern: str, value: str = "") -> bool:
+    def sql_regex_match(pattern: str, value: str) -> bool:
         return regex_compile(pattern).match(value) is not None
 
     # Placeholder for user authentication
@@ -104,31 +111,35 @@ def main():
     commands = {
         # Commands usable before login
         "help": {"help": "Show help message."},
-        "man": {"args": {"command": {"format": "text"}}, "help": "Show manual for a specific command."},
+        "man": {"args": {"command": {"format": "text"}}, "help": "Show manual for a specific command.", "example": "man login"},
         "exit": {"help": "Exit Booker."},
         "version": {"help": "Show current version info."},
         "cls": {"help": "Clear the screen."},
-        "login": {"args": {"username": {"format": "text"}}, "help": "Log in as a user."},
+        "login": {"args": {"username": {"format": "text"}}, "help": "Log in as a user.", "example": "login admin"},
         # Commands usable as admins
         "reg": {
             "args": {"username": {"format": "text"}},
             "help": "Register a new user or change the password of an existing user.",
-            "use_requirement": "admin"
+            "use_requirement": "admin",
+            "example": "reg newuser"
         },
         "dereg": {
             "args": {"usernames": {"format": "csv"}},
             "help": "Deregister users.",
-            "use_requirement": "admin"
+            "use_requirement": "admin",
+            "example": "dereg user1,user2"
         },
         "auth": {
             "args": {"usernames": {"format": "csv"}},
             "help": "Make user an administrator.",
-            "use_requirement": "admin"
+            "use_requirement": "admin",
+            "example": "auth user1,user2"
         },
         "deauth": {
             "args": {"usernames": {"format": "csv"}},
             "help": "Make user a standard user.",
-            "use_requirement": "admin"
+            "use_requirement": "admin",
+            "example": "deauth user1,user2"
         },
         "users": {
             "help": "List all users.",
@@ -137,17 +148,20 @@ def main():
         "build": {
             "args": {"roomIDs": {"format": "csv"}, "description": {"format": "text", "default": "Classroom"}},
             "help": "Create new rooms or change the description of existing rooms with specified IDs.",
-            "use_requirement": "admin"
+            "use_requirement": "admin",
+            "example": "build room101,room102 'Computer Lab'"
         },
         "destroy": {
             "args": {"roomIDs": {"format": "csv"}},
             "help": "Delete rooms with specified IDs.",
-            "use_requirement": "admin"
+            "use_requirement": "admin",
+            "example": "destroy room101,room102"
         },
         "sql": {
             "args": {"query": {"format": "text"}},
             "help": "Execute a raw SQL query. The SQL query must be quoted. Be careful with this command as it can modify the database.",
-            "use_requirement": "admin"
+            "use_requirement": "admin",
+            "example": "sql 'SELECT * FROM users'"
         },
         # Commands usable as standard users
         "cp": {
@@ -167,12 +181,14 @@ def main():
                 "usage": {"format": "regex", "default": ""}
             },
             "help": "List bookings of the specified rooms booked by specified users within a given time. Usage can be filtered using a regular expression.",
-            "use_requirement": "user"
+            "use_requirement": "user",
+            "example": "search --roomIDs room101,room102 --start '2023-10-01 08:00' --end '2023-10-01 18:00' --usage 'Lecture'"
         },
         "show": {
             "args": {"bookingIDs": {"format": "csv", "default": MetaWord.asterisk, "special_words": [MetaWord.asterisk]}},
             "help": "Show bookings of specified booking IDs.",
-            "use_requirement": "user"
+            "use_requirement": "user",
+            "example": "show 1,2,3"
         },
         "book": {
             "args": {
@@ -182,17 +198,20 @@ def main():
                 "usage": {"format": "text"}
             },
             "help": "Make a reservation for specified rooms at a given time.",
-            "use_requirement": "user"
+            "use_requirement": "user",
+            "example": "book room101,room102 --start '2023-10-01 08:00' --end '2023-10-01 18:00' --usage 'Lecture'"
         },
         "modify": {
             "args": {"bookingIDs": {"format": "csv"}, "Description": {"format": "text"}},
             "help": "Modify the description of bookings by booking IDs. Standard users can only modify their own future bookings.",
-            "use_requirement": "user"
+            "use_requirement": "user",
+            "example": "modify 1,2,3 'New Description'"
         },
         "cancel": {
             "args": {"bookingIDs": {"format": "csv"}},
             "help": "Cancel bookings by booking IDs. Standard users can only cancel their own future bookings.",
-            "use_requirement": "user"
+            "use_requirement": "user",
+            "example": "cancel 1,2,3"
         },
         "clear": {
             "args": {
@@ -203,7 +222,8 @@ def main():
                 "usage": {"format": "regex", "default": ""}
             },
             "help": "Cancel bookings to make available the specified rooms booked by specified users within a given time. Usage can be filtered using a regular expression. Standard users can only clear their own future bookings.",
-            "use_requirement": "user"
+            "use_requirement": "user",
+            "example": "clear room101,room102 --start '2023-10-01 08:00' --end '2023-10-01 18:00' --usage 'Lecture'"
         }
     }
 
@@ -521,6 +541,11 @@ def main():
                 print(syntax_text.strip())
                 print("\nDescription:")
                 print(commands[args["command"]]['help'])
+                print("\nExample:")
+                if 'example' in commands[args["command"]]:
+                    print(commands[args["command"]]['example'])
+                else:
+                    print(args["command"])
             else:
                 displayerror(f"No manual entry for command '{args["command"]}'.")
 
@@ -773,7 +798,7 @@ def main():
                         displaywarning(f"You can only cancel your own bookings as a standard user. Booking ID '{booking_id}' is skipped.")
                         command_notice = True
                         continue
-                    if not isadmin and not is_valid_time_interval(current_submission_time, result_booking[1], allow_equal=True):
+                    if not isadmin and not is_valid_time_interval(current_submission_time, result_booking[1]):
                         displaywarning(f"Booking ID '{booking_id}' is in the past and cannot be cancelled by a standard user.")
                         command_notice = True
                         continue
@@ -814,7 +839,7 @@ def main():
                         continue
 
                     # Dynamic input validity check using stored data
-                    if not isadmin and not is_valid_time_interval(current_submission_time, args["start"], allow_equal=True):
+                    if not isadmin and not is_valid_time_interval(current_submission_time, args["start"]):
                         displayerror("Standard user cannot set start time in the past. Please use a future time or 'now'.")
                         print()
                         continue
