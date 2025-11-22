@@ -3,6 +3,8 @@ This file contains:
  - CalendarView: a Tkinter/ttk Frame that displays a month grid and bookings per day
  - fetch_bookings(db_path, start=None, end=None): helper to extract bookings from the project's SQLite database
  - a small demo runner that loads bookings from data.db (if present) or uses sample data
+
+Note: This is a calendar demo with no other funtionalities except displaying bookings.
 """
 
 import tkinter as tk
