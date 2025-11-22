@@ -1,11 +1,8 @@
-"""Combined calendar GUI module
-
+"""
 This file contains:
  - CalendarView: a Tkinter/ttk Frame that displays a month grid and bookings per day
  - fetch_bookings(db_path, start=None, end=None): helper to extract bookings from the project's SQLite database
  - a small demo runner that loads bookings from data.db (if present) or uses sample data
-
-Drop this file into the `src` folder and run it with Python to launch the demo GUI.
 """
 
 import tkinter as tk
